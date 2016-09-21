@@ -1,0 +1,62 @@
+/*
+Copyright 2014, 2015 Jonathan da Silva SAntos
+
+This file is part of Alphanes.
+
+    Alphanes is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Foobar is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
+*/
+package ioports
+
+import "zerojnt/cartridge"
+import "zerojnt/mapper"
+import "fmt"
+
+func READ_PPUSTATUS(IO *IOPorts) byte {
+
+	var result byte = 0
+	result = SetBit(result, 0, Bit0(IO.PPUSTATUS.WRITTEN))
+	result = SetBit(result, 1, Bit1(IO.PPUSTATUS.WRITTEN))
+	result = SetBit(result, 2, Bit2(IO.PPUSTATUS.WRITTEN))
+	result = SetBit(result, 3, Bit3(IO.PPUSTATUS.WRITTEN))
+	
+	if IO.PPUSTATUS.SPRITE_OVERFLOW == true {
+		result = SetBit(result, 5,1)
+	}
+	
+	if IO.PPUSTATUS.SPRITE_0_BIT == true {
+		result = SetBit(result, 6,1)
+	}
+		
+	if IO.PPUSTATUS.NMI_OCCURRED == true {
+		result = SetBit(result, 7,1)
+	}
+		
+	IO.PPUSTATUS.NMI_OCCURRED = false
+	return result	
+}
+
+func READ_OAMDATA(IO *IOPorts) byte {
+
+		var result byte = IO.PPU_OAM[IO.PPU_OAM_ADDRESS]
+		IO.PPU_OAM_ADDRESS++
+		return result
+}
+
+func READ_PPUDATA(IO *IOPorts, cart *cartridge.Cartridge) byte {
+
+fmt.Printf("rd ppu data: [%x] = [%x]\n", mapper.PPU(IO.VRAM_ADDRESS), IO.PPU_RAM[ mapper.PPU (IO.VRAM_ADDRESS) ])
+	var result byte = IO.PPU_RAM[ mapper.PPU (IO.VRAM_ADDRESS) ]
+	IO.VRAM_ADDRESS += IO.PPUCTRL.VRAM_INCREMENT
+	return result
+}
