@@ -29,7 +29,11 @@ import "os"
 var tx uint16 = 0
 var ty uint16 = 0
 
+
 type PPU struct {
+
+	SCREEN_DATA []int
+	
 	Name string
 	CYC int		
 	SCANLINE int
@@ -50,6 +54,7 @@ type PPU struct {
 	
 	IO *ioports.IOPorts
 	
+	
 }
 
 var window *sdl.Window
@@ -63,9 +68,21 @@ func StartPPU(IO *ioports.IOPorts) PPU {
 	fmt.Printf("Started PPU")
 	fmt.Printf(ppu.Name)
 	initCanvas()
+	
+	
+
+
+	
+
+
+
+	
+	
 	ppu.CYC = 0
 	ppu.SCANLINE = -1
 	ppu.IO = IO
+	
+	ppu.SCREEN_DATA = make([]int, 61441)
 		
 	return ppu
 }
@@ -105,11 +122,13 @@ for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 	if ppu.CYC >= 0 && ppu.CYC < 256 && ppu.VISIBLE_SCANLINE {
 		
 		var x uint16 = uint16(ppu.CYC%256)
-		var y uint16 = uint16(ppu.CYC%240)
+		var y uint16 = uint16(ppu.SCANLINE%240)
 		
 		if (tx != x || ty != y) {
-			fetchNametable(ppu, x, y)
-			drawTile(ppu, x, y)
+			if x < 256-8 && y < 240-8 {
+				fetchNametable(ppu, x, y)
+				drawTile(ppu, x, y)
+			}
 			tx = x
 			ty = y
 			
@@ -143,17 +162,17 @@ for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 		
 		if ppu.SCANLINE == 241 && ppu.CYC == 0 {
 			SetVBLANK(ppu)
-			renderer.Present()
+			ShowScreen(ppu)
 		}
 		
 		if ppu.SCANLINE == 261 {
-			ClearVBLANK(ppu)
+			SetVBLANK(ppu)
 		}
 		
 		if ppu.SCANLINE > 261 {			
 			
-			renderer.SetDrawColor(0,0,0,255)
-			renderer.Clear()
+			ClearScreen(ppu)
+			
 			ppu.SCANLINE = -1
 		}
 		
@@ -185,7 +204,7 @@ for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 func initCanvas() {
 
 	var winTitle string = "Alphanes"
-	var winWidth, winHeight int = 320, 240
+	var winWidth, winHeight int = 256, 240
 
 	
 
@@ -208,12 +227,16 @@ func fetchTile(ppu *PPU) [8][8]byte {
 
 	var result [8][8]byte
 	
+	
 	for y := 0; y < 16; y+=2 {
 	
-			var addr uint16 = ppu.IO.PPUCTRL.BACKGROUND_ADDR + uint16(ppu.NAMETABLE)
+			var addr uint16 = ppu.IO.PPUCTRL.BACKGROUND_ADDR + uint16(ppu.NAMETABLE) + uint16(y) + uint16(ppu.IO.PPUSCROLL.X)
+			tile_addr := mapper.PPU( addr )
 			
-			var a byte = ppu.IO.PPU_RAM[ mapper.PPU( addr + uint16(y) ) ]
-			var b byte = ppu.IO.PPU_RAM[ mapper.PPU(addr+uint16(y)+1)  ]
+			
+			
+			var a byte = ppu.IO.PPU_RAM[ tile_addr ]
+			var b byte = ppu.IO.PPU_RAM[ tile_addr+1 ]
 			
 			for x := 0; x < 8; x++ {
 				xa := (a << byte(x)) >> 7
@@ -233,10 +256,17 @@ func fetchTile(ppu *PPU) [8][8]byte {
 }
 
 func fetchNametable(ppu *PPU, x uint16, y uint16) {
-	ppu.NAMETABLE = ppu.IO.PPU_RAM[ mapper.PPU( ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x*y) ) ]
+
+ 
+
+	addr := mapper.PPU( ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*256)) )
+	ppu.NAMETABLE = ppu.IO.PPU_RAM[ addr ]
+	//fmt.Printf("nametable: addr( %x ) x:%d y:%d (x*y: %d ) rawTile) = %x\n", addr, x, y, x+(y*256), ppu.NAMETABLE )
 }
 
 func drawTile(ppu *PPU, x uint16, y uint16) {
+
+if(ppu.IO.PPUMASK.SHOW_BACKGROUND == false) { return }
 
 	tile := fetchTile(ppu)
 	
@@ -249,11 +279,55 @@ func drawTile(ppu *PPU, x uint16, y uint16) {
 			if tile[kx][ky] == 2 { renderer.SetDrawColor(190, 190, 190, 255) }
 			if tile[kx][ky] == 3 { renderer.SetDrawColor(255, 255, 255, 255) }
 			
+			var ox int = int(x*8) + kx
+			var oy int = int(y*8) + ky
+
+			WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
 			
-			renderer.DrawPoint(int(x*8) + kx, int(y*8) + ky)
 		
 		}
 	}
 	
 
+}
+
+func ClearScreen(ppu *PPU) {
+
+	for x:=0; x<256; x++ {
+		for y:=0; y<240; y++ {
+			WRITE_SCREEN(ppu, x,y,0)
+		}
+	}
+
+}
+
+func ShowScreen(ppu *PPU) {
+
+			renderer.SetDrawColor(0,0,0,255)
+			renderer.Clear()
+
+	for x:=0; x<256; x++ {
+		for y:=0; y<240; y++ {
+			c := READ_SCREEN(ppu, x, y)
+			
+			if c == 0 { renderer.SetDrawColor(0, 0, 0, 255) }
+			if c == 1 { renderer.SetDrawColor(128, 128, 128, 255) }
+			if c == 2 { renderer.SetDrawColor(190, 190, 190, 255) }
+			if c == 3 { renderer.SetDrawColor(255, 255, 255, 255) }
+			renderer.DrawPoint(x,y)
+			
+		}
+	}
+	renderer.Present()
+}
+
+func READ_SCREEN(ppu *PPU, x int, y int) int {
+	return ppu.SCREEN_DATA[x +(y*256) ]
+}
+
+func WRITE_SCREEN(ppu *PPU, x int, y int, k int) {
+	if x >= 256 || y >= 240 {
+		return
+	}
+	ppu.SCREEN_DATA[x + (y*256) ] = k
 }
