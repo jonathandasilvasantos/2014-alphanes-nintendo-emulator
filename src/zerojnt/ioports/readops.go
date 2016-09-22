@@ -42,6 +42,11 @@ func READ_PPUSTATUS(IO *IOPorts) byte {
 	}
 		
 	IO.PPUSTATUS.NMI_OCCURRED = false
+	
+	IO.PPUSCROLL.X = 0
+	IO.PPUSCROLL.Y = 0
+	IO.VRAM_ADDRESS = 0
+	
 	return result	
 }
 
