@@ -20,7 +20,7 @@ package ppu
 
 import "fmt"
 import "zerojnt/cartridge"
-import "zerojnt/mapper"
+//import "zerojnt/mapper"
 import "zerojnt/ioports"
 
 import "github.com/veandco/go-sdl2/sdl"
@@ -127,14 +127,14 @@ for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 	}
 	
 		
-		var x uint16 = uint16(ppu.CYC%256)
-		var y uint16 = uint16(ppu.SCANLINE%240)
+		var x uint16 = uint16(ppu.CYC%256)/8
+		var y uint16 = uint16(ppu.SCANLINE%240)/8
 		
 		if (tx != x || ty != y) {
-			if x < 256-8 && y < 240-8 {
+			//if x < 256-8 && y < 240-8 {
 				fetchNametable(ppu, x, y)
 				drawTile(ppu, x, y)
-			}
+			//}
 			tx = x
 			ty = y
 			
@@ -234,10 +234,10 @@ func fetchTile(ppu *PPU) [8][8]byte {
 	var result [8][8]byte
 	
 	
-	for y := 0; y < 16; y+=2 {
+	for y := 0; y < 8; y++ {
 	
-			var addr uint16 = ppu.IO.PPUCTRL.BACKGROUND_ADDR + uint16(ppu.NAMETABLE) + uint16(y) + uint16(ppu.IO.PPUSCROLL.X)
-			tile_addr := mapper.PPU( addr )
+			var addr uint16 = ppu.IO.PPUCTRL.BACKGROUND_ADDR + uint16(ppu.NAMETABLE)
+			tile_addr := addr
 			
 			
 			
@@ -251,10 +251,10 @@ func fetchTile(ppu *PPU) [8][8]byte {
 			
 				
 				
-				if xa == 0 && xb == 0 { result[x][y/2] = 0 }			
-				if xa == 1 && xb == 0 { result[x][y/2] = 1 }
-				if xa == 0 && xb == 1 { result[x][y/2] = 2 }
-				if xa == 1 && xb == 1 { result[x][y/2] = 3 }			
+				if xa == 0 && xb == 0 { result[x][y] = 0 }			
+				if xa == 1 && xb == 0 { result[x][y] = 1 }
+				if xa == 0 && xb == 1 { result[x][y] = 2 }
+				if xa == 1 && xb == 1 { result[x][y] = 3 }			
 			}
 	}
 	
@@ -264,13 +264,13 @@ func fetchTile(ppu *PPU) [8][8]byte {
 func fetchNametable(ppu *PPU, x uint16, y uint16) {
 
  
-
-	addr := mapper.PPU( ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*256)) )
-	ppu.NAMETABLE = ppu.IO.PPU_RAM[ addr ]
-	//fmt.Printf("nametable: addr( %x ) x:%d y:%d (x*y: %d ) rawTile) = %x\n", addr, x, y, x+(y*256), ppu.NAMETABLE )
+	absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*32) )
+	ppu.NAMETABLE = ppu.IO.PPU_RAM[ absolute_addr ]
 }
 
 func drawTile(ppu *PPU, x uint16, y uint16) {
+
+
 
 if(ppu.IO.PPUMASK.SHOW_BACKGROUND == false) { return }
 

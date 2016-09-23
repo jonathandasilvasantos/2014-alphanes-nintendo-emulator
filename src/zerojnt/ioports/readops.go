@@ -59,7 +59,7 @@ func READ_OAMDATA(IO *IOPorts) byte {
 
 func READ_PPUDATA(IO *IOPorts, cart *cartridge.Cartridge) byte {
 
-//fmt.Printf("rd ppu data: [%x] = [%x]\n", mapper.PPU(IO.VRAM_ADDRESS), IO.PPU_RAM[ mapper.PPU (IO.VRAM_ADDRESS) ])
+
 	var result byte = IO.PPU_RAM[ mapper.PPU (IO.VRAM_ADDRESS) ]
 	IO.VRAM_ADDRESS += IO.PPUCTRL.VRAM_INCREMENT
 	return result
