@@ -131,10 +131,34 @@ for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 		var y uint16 = uint16(ppu.SCANLINE%240)/8
 		
 		if (tx != x || ty != y) {
-			//if x < 256-8 && y < 240-8 {
-				fetchNametable(ppu, x, y)
-				drawTile(ppu, x, y)
-			//}
+			
+				if  ppu.IO.PPUMASK.SHOW_BACKGROUND == true {
+					fetchNametable(ppu, x, y)
+					drawTile(ppu, x, y, ppu.NAMETABLE, ppu.IO.PPUCTRL.BACKGROUND_ADDR, false, false, false)
+				}
+				
+				for s := 0; s<256; s+=4 {
+					pos_y := uint16( ppu.IO.PPU_OAM[s] )
+					attr := ppu.IO.PPU_OAM[s+2]
+					pos_x := uint16( ppu.IO.PPU_OAM[s+3] )
+					ind := ppu.IO.PPU_OAM[s+1]
+					
+					
+					var flipX bool = false
+					var flipY bool = false
+					
+					if (attr << 7) >> 7 == 1 {
+						flipY = true
+					}
+					
+					if (attr << 6) >> 7 == 1 {
+						flipX = true
+					}
+					
+					drawTile(ppu, pos_x, pos_y, ind, ppu.IO.PPUCTRL.SPRITE_8_ADDR, flipX, flipY, true)
+					
+				}
+			
 			tx = x
 			ty = y
 			
@@ -228,16 +252,19 @@ func initCanvas() {
 //	defer renderer.Destroy()
 }
 
-func fetchTile(ppu *PPU) [8][8]byte {
+func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 
 
 	var result [8][8]byte
 	
 	
-	for y := 0; y < 8; y++ {
 	
-			var addr uint16 = ppu.IO.PPUCTRL.BACKGROUND_ADDR + uint16(ppu.NAMETABLE)
-			tile_addr := addr
+	
+	for y := 0; y < 16; y+=2 {
+	
+			var addr uint16 = base_addr + uint16(index)
+			tile_addr := addr + uint16(y)
+			
 			
 			
 			
@@ -251,10 +278,10 @@ func fetchTile(ppu *PPU) [8][8]byte {
 			
 				
 				
-				if xa == 0 && xb == 0 { result[x][y] = 0 }			
-				if xa == 1 && xb == 0 { result[x][y] = 1 }
-				if xa == 0 && xb == 1 { result[x][y] = 2 }
-				if xa == 1 && xb == 1 { result[x][y] = 3 }			
+				if xa == 0 && xb == 0 { result[x][y/2] = 0 }			
+				if xa == 1 && xb == 0 { result[x][y/2] = 1 }
+				if xa == 0 && xb == 1 { result[x][y/2] = 2 }
+				if xa == 1 && xb == 1 { result[x][y/2] = 3 }			
 			}
 	}
 	
@@ -268,27 +295,33 @@ func fetchNametable(ppu *PPU, x uint16, y uint16) {
 	ppu.NAMETABLE = ppu.IO.PPU_RAM[ absolute_addr ]
 }
 
-func drawTile(ppu *PPU, x uint16, y uint16) {
+func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {
 
-
-
-if(ppu.IO.PPUMASK.SHOW_BACKGROUND == false) { return }
-
-	tile := fetchTile(ppu)
+	tile := fetchTile(ppu, index, base_addr)
 	
 	for ky := 0; ky < 8; ky++ {
 		for kx := 0; kx < 8; kx++ {
 		
-		
-			if tile[kx][ky] == 0 { renderer.SetDrawColor(0, 0, 0, 255) }
-			if tile[kx][ky] == 1 { renderer.SetDrawColor(128, 128, 128, 255) }
-			if tile[kx][ky] == 2 { renderer.SetDrawColor(190, 190, 190, 255) }
-			if tile[kx][ky] == 3 { renderer.SetDrawColor(255, 255, 255, 255) }
 			
 			var ox int = int(x*8) + kx
+			
+			if (flipX == true) {
+				ox = (int(x*8) + 8) - kx
+			}
+			
 			var oy int = int(y*8) + ky
+			
+			if (flipY == true) {
+				oy = (int(y*8) + 8) - ky
+			}
 
-			WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
+			if ignoreZero == true {
+			if int(tile[kx][ky]) > 0 {
+					WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
+				}
+			} else {
+				WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
+			}
 			
 		
 		}

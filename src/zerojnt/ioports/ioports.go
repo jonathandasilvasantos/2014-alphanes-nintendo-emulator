@@ -19,6 +19,7 @@ This file is part of Alphanes.
 package ioports
 
 import "zerojnt/cartridge"
+//import "fmt"
 
 type PPU_STATUS struct {
 	WRITTEN byte // Least significant bits previously written into a PPU register
@@ -106,6 +107,8 @@ func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
 
 func RMPPU(IO *IOPorts, cart *cartridge.Cartridge, addr uint16) byte {
 
+	//fmt.Printf("rd %x\n", addr)
+
 	switch(addr) {
 	
 		case 0x2002:
@@ -127,6 +130,8 @@ func RMPPU(IO *IOPorts, cart *cartridge.Cartridge, addr uint16) byte {
 
 
 func WMPPU(IO *IOPorts, cart *cartridge.Cartridge, addr uint16, value byte) {
+
+	//fmt.Printf("wrt %x : %x\n", addr, value)
 
 	// Last bytes written
 	IO.PPUSTATUS.WRITTEN = value

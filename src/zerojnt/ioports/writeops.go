@@ -170,7 +170,7 @@ func WRITE_OAMDMA(IO *IOPorts, cart *cartridge.Cartridge, value byte) {
 	for i:=0; i<256; i++ {
 		prgrom, finaladdr := mapper.MemoryMapper(cart, cpuaddr)
 		var data byte
-		if prgrom == false{
+		if prgrom == true {
 			data = cart.PRG[finaladdr]
 		} else {
 			data = IO.CPU_RAM[finaladdr]
