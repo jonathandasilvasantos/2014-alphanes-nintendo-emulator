@@ -22,9 +22,10 @@ import "fmt"
 import "zerojnt/cartridge"
 //import "zerojnt/mapper"
 import "zerojnt/ioports"
+import "os"
+import "os/exec"
 
 import "github.com/veandco/go-sdl2/sdl"
-import "os"
 
 var tx uint16 = 0
 var ty uint16 = 0
@@ -133,11 +134,13 @@ for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 		if (tx != x || ty != y) {
 			
 				if  ppu.IO.PPUMASK.SHOW_BACKGROUND == true {
-					fetchNametable(ppu, x, y)
-					drawTile(ppu, x, y, ppu.NAMETABLE, ppu.IO.PPUCTRL.BACKGROUND_ADDR, false, false, false)
+				//	fetchNametable(ppu, x, y)
+				//	drawTile(ppu, x, y, ppu.NAMETABLE, ppu.IO.PPUCTRL.BACKGROUND_ADDR, false, false, false)
 				}
 				
-				for s := 0; s<256; s+=4 {
+				printNametable(ppu)
+				
+				/*for s := 0; s<256; s+=4 {
 					pos_y := uint16( ppu.IO.PPU_OAM[s] )
 					attr := ppu.IO.PPU_OAM[s+2]
 					pos_x := uint16( ppu.IO.PPU_OAM[s+3] )
@@ -157,7 +160,7 @@ for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 					
 					drawTile(ppu, pos_x, pos_y, ind, ppu.IO.PPUCTRL.SPRITE_8_ADDR, flipX, flipY, true)
 					
-				}
+				} */
 			
 			tx = x
 			ty = y
@@ -291,7 +294,7 @@ func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 func fetchNametable(ppu *PPU, x uint16, y uint16) {
 
  
-	absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*32) )
+	absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*32)  )
 	ppu.NAMETABLE = ppu.IO.PPU_RAM[ absolute_addr ]
 }
 
@@ -369,4 +372,20 @@ func WRITE_SCREEN(ppu *PPU, x int, y int, k int) {
 		return
 	}
 	ppu.SCREEN_DATA[x + (y*256) ] = k
+}
+
+func printNametable(ppu *PPU) {
+
+c := exec.Command("clear")
+c.Stdout = os.Stdout
+c.Run()
+
+for x:= 0; x < 32; x++ {
+for y:= 0; y < 32; y++ {
+	fetchNametable(ppu, uint16(x), uint16(y))
+	fmt.Printf("%2x", ppu.NAMETABLE )
+}
+fmt.Printf("\n")
+}
+
 }
