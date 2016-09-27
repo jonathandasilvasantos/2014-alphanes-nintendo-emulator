@@ -20,6 +20,7 @@ package ioports
 
 import "zerojnt/cartridge"
 import "zerojnt/mapper"
+//import "fmt"
 
 func READ_PPUSTATUS(IO *IOPorts) byte {
 
@@ -41,7 +42,6 @@ func READ_PPUSTATUS(IO *IOPorts) byte {
 	if IO.PPUSTATUS.NMI_OCCURRED == true {
 		result = SetBit(result, 7,1)
 	}
-		
 	IO.PPUSTATUS.NMI_OCCURRED = false
 	
 	IO.PPUSCROLL.X = 0

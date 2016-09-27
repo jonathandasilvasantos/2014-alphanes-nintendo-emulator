@@ -80,7 +80,7 @@ func StartPPU(IO *ioports.IOPorts) PPU {
 	
 	
 	ppu.CYC = 0
-	ppu.SCANLINE = -1
+	ppu.SCANLINE = 241
 	ppu.IO = IO
 	
 	ppu.SCREEN_DATA = make([]int, 61441)
@@ -119,10 +119,12 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 	checkKeyboard()
 	checkVisibleScanline(ppu)
 	
+	//fmt.Printf("SL: %d CYC: %d\n", ppu.CYC, ppu.SCANLINE)
+	
 	if (ppu.SCANLINE < 0) && (ppu.CYC <= 0) {
 		ppu.SCANLINE = 0
 		ppu.CYC = 0
-		ppu.IO.PPUSTATUS.SPRITE_0_BIT = false
+		//ppu.IO.PPUSTATUS.SPRITE_0_BIT = false
 
 		return
 	}
@@ -130,7 +132,7 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 	if ppu.CYC >= 0 && ppu.CYC < 256 && ppu.VISIBLE_SCANLINE {
 	
 	if ppu.CYC == 2 {
-		ppu.IO.PPUSTATUS.SPRITE_0_BIT = true
+		//ppu.IO.PPUSTATUS.SPRITE_0_BIT = true
 	}
 	
 		
