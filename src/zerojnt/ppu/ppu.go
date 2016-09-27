@@ -98,19 +98,25 @@ func checkVisibleScanline(ppu *PPU) {
 
 }
 
-func Process(ppu *PPU, cart *cartridge.Cartridge) {
-
-for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-	switch t := event.(type) {
-		case *sdl.KeyDownEvent:
-		if t.Keysym.Sym == 27 {
-		fmt.Printf("[%d ms] Keyboard\ttype:%d\tsym:%d\tmodifiers:%d\tstate:%d\trepeat:%d\n",t.Timestamp, t.Type, t.Keysym.Sym, t.Keysym.Mod, t.State, t.Repeat)
-			os.Exit(0)
-		}			
-		break
+func checkKeyboard() {
+	for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+		switch t := event.(type) {
+			case *sdl.KeyDownEvent:
+			if t.Keysym.Sym == 27 {
+			fmt.Printf("[%d ms] Keyboard\ttype:%d\tsym:%d\tmodifiers:%d\tstate:%d\trepeat:%d\n",t.Timestamp, t.Type, t.Keysym.Sym, t.Keysym.Mod, t.State, t.Repeat)
+				os.Exit(0)
+			}			
+			break
+		}
 	}
 }
 
+
+func Process(ppu *PPU, cart *cartridge.Cartridge) {
+
+
+
+	checkKeyboard()
 	checkVisibleScanline(ppu)
 	
 	if (ppu.SCANLINE < 0) && (ppu.CYC <= 0) {

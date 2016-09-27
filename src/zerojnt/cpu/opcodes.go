@@ -1107,5 +1107,5 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 }
 
 func Verbose(cpu *CPU, cart *cartridge.Cartridge) {
-	fmt.Printf("%4X  %2X  %2X %2X                       A:%2X X:%2X Y:%2X P:%2X SP:%2X CYC:%d\n", cpu.PC, RM(cpu, cart, cpu.PC), RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2), cpu.A, cpu.X, cpu.Y, cpu.P, cpu.SP, cpu.CYC )
+	fmt.Printf("%4X  %2X  %2X %2X                       A:%2X X:%2X Y:%2X P:%2X SP:%2X CYC:%d SL: %d\n", cpu.PC, RM(cpu, cart, cpu.PC), RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2), cpu.A, cpu.X, cpu.Y, cpu.P, cpu.SP, cpu.D.CURRENT_PPU.CYC, cpu.D.CURRENT_PPU.SCANLINE )
 }

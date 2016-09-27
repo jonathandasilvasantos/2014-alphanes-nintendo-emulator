@@ -85,9 +85,9 @@ func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
 	io.PPU_RAM = make([]byte, 0x4000)
 	io.NMI = false
 	
-	io.PPUSTATUS.NMI_OCCURRED = true
+	io.PPUSTATUS.NMI_OCCURRED = false
 	io.PPUSTATUS.SPRITE_0_BIT = false
-	io.PPUSTATUS.SPRITE_OVERFLOW = true
+	io.PPUSTATUS.SPRITE_OVERFLOW = false
 	
 
 	

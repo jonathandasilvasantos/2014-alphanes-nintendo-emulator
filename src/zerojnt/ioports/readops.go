@@ -28,6 +28,7 @@ func READ_PPUSTATUS(IO *IOPorts) byte {
 	result = SetBit(result, 1, Bit1(IO.PPUSTATUS.WRITTEN))
 	result = SetBit(result, 2, Bit2(IO.PPUSTATUS.WRITTEN))
 	result = SetBit(result, 3, Bit3(IO.PPUSTATUS.WRITTEN))
+	result = SetBit(result, 4, Bit4(IO.PPUSTATUS.WRITTEN))
 	
 	if IO.PPUSTATUS.SPRITE_OVERFLOW == true {
 		result = SetBit(result, 5,1)

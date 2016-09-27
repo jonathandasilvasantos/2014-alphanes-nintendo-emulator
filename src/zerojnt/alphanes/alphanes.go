@@ -61,6 +61,7 @@ import "os"
 		cpu.SetResetVector(&Nescpu, &Cart)
 
 		Nesppu = ppu.StartPPU(&Nescpu.IO)
+		Nescpu.D.CURRENT_PPU = &Nesppu
 		
 		
 		Alphanes.Running = true		

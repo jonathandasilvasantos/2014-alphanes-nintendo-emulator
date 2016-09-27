@@ -21,9 +21,11 @@ package debug
 import "fmt"
 import "io/ioutil"
 import "strings"
+import "zerojnt/ppu"
 import "log"
 
 type Debug struct {
+	CURRENT_PPU *ppu.PPU
 	Lines []string
 	Verbose bool
 	Enable bool
@@ -65,6 +67,10 @@ func GetP(line string) string {
 
 func GetSP(line string) string {
 	return "0x"+line[71:73]
+}
+
+func GetSL(line string) string {
+	return "0x"+line[76:]
 }
 
 func PrintLine(line string) {
