@@ -137,46 +137,9 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 		var x uint16 = uint16(ppu.CYC%256)/8
 		var y uint16 = uint16(ppu.SCANLINE%240)/8
 		
-		if (tx != x || ty != y) {
-			
-				if  ppu.IO.PPUMASK.SHOW_BACKGROUND == true {
-				//	fetchNametable(ppu, x, y)
-				//	drawTile(ppu, x, y, ppu.NAMETABLE, ppu.IO.PPUCTRL.BACKGROUND_ADDR, false, false, false)
-				}
-				
-				printNametable(ppu)
-				
-				/*for s := 0; s<256; s+=4 {
-					pos_y := uint16( ppu.IO.PPU_OAM[s] )
-					attr := ppu.IO.PPU_OAM[s+2]
-					pos_x := uint16( ppu.IO.PPU_OAM[s+3] )
-					ind := ppu.IO.PPU_OAM[s+1]
-					
-					
-					var flipX bool = false
-					var flipY bool = false
-					
-					if (attr << 7) >> 7 == 1 {
-						flipY = true
-					}
-					
-					if (attr << 6) >> 7 == 1 {
-						flipX = true
-					}
-					
-					drawTile(ppu, pos_x, pos_y, ind, ppu.IO.PPUCTRL.SPRITE_8_ADDR, flipX, flipY, true)
-					
-				} */
-			
-			tx = x
-			ty = y
-			
-		}
+		handleBackground(ppu, x, y)
+		handleSprite(ppu, x, y)
 		
-		
-		
-		
-
 	}
 	
 	
@@ -382,16 +345,50 @@ func WRITE_SCREEN(ppu *PPU, x int, y int, k int) {
 
 func printNametable(ppu *PPU) {
 
-c := exec.Command("clear")
-c.Stdout = os.Stdout
-c.Run()
+	c := exec.Command("clear")
+	c.Stdout = os.Stdout
+	c.Run()
 
-for x:= 0; x < 32; x++ {
-for y:= 0; y < 32; y++ {
-	fetchNametable(ppu, uint16(x), uint16(y))
-	fmt.Printf("%2x", ppu.NAMETABLE )
-}
-fmt.Printf("\n")
+	for x:= 0; x < 32; x++ {
+		for y:= 0; y < 32; y++ {
+			fetchNametable(ppu, uint16(x), uint16(y))
+			fmt.Printf("%2x", ppu.NAMETABLE )
+		}
+		fmt.Printf("\n")
+	}
+
 }
 
+func handleBackground(ppu *PPU, x uint16, y uint16) {
+
+	if  ppu.IO.PPUMASK.SHOW_BACKGROUND == true {
+		fetchNametable(ppu, x, y)
+		drawTile(ppu, x, y, ppu.NAMETABLE, ppu.IO.PPUCTRL.BACKGROUND_ADDR, false, false, false)
+	}
+
+}
+
+func handleSprite(ppu *PPU, x uint16, y uint16) {
+
+				for s := 0; s<256; s+=4 {
+					pos_y := uint16( ppu.IO.PPU_OAM[s] )
+					attr := ppu.IO.PPU_OAM[s+2]
+					pos_x := uint16( ppu.IO.PPU_OAM[s+3] )
+					ind := ppu.IO.PPU_OAM[s+1]
+					
+					
+					var flipX bool = false
+					var flipY bool = false
+					
+					if (attr << 7) >> 7 == 1 {
+						flipY = true
+					}
+					
+					if (attr << 6) >> 7 == 1 {
+						flipX = true
+					}
+					
+					drawTile(ppu, pos_x, pos_y, ind, ppu.IO.PPUCTRL.SPRITE_8_ADDR, flipX, flipY, true)
+					
+				} 
 }
