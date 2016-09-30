@@ -1,5 +1,5 @@
 /*
-Copyright 2014, 2015 Jonathan da Silva SAntos
+Copyright 2014, 2014 Jonathan da Silva SAntos
 
 This file is part of Alphanes.
 
@@ -119,7 +119,7 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 	checkKeyboard()
 	checkVisibleScanline(ppu)
 	
-	//fmt.Printf("SL: %d CYC: %d\n", ppu.CYC, ppu.SCANLINE)
+
 	
 	if (ppu.SCANLINE < 0) && (ppu.CYC <= 0) {
 		ppu.SCANLINE = 0
@@ -149,14 +149,15 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 
 
 	
-		if ppu.NMI_DELAY > 0 {
+		if ppu.NMI_DELAY > 0 && ppu.IO.PPUSTATUS.NMI_OCCURRED == true && ppu.IO.PPUCTRL.GEN_NMI == true {
 		
 			ppu.NMI_DELAY = ppu.NMI_DELAY - 1
-			if ppu.NMI_DELAY == 0 && ppu.IO.PPUSTATUS.NMI_OCCURRED == true && ppu.IO.PPUCTRL.GEN_NMI == true {
+			if ppu.NMI_DELAY == 0 {
 				ioports.SetNMI(ppu.IO)
+				
 			}		
 		}
-	
+					
 	ppu.CYC = ppu.CYC + 1
 	if ppu.CYC > 341 {
 		
@@ -170,7 +171,7 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 		}
 		
 		if ppu.SCANLINE == 261 {
-			SetVBLANK(ppu)
+			ClearVBLANK(ppu)
 		}
 		
 		if ppu.SCANLINE > 261 {			

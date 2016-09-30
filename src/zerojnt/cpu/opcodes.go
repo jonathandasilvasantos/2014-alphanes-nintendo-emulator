@@ -39,9 +39,9 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		return
 	}
 	
-	if cpu.D.Verbose && cpu.D.Enable { 
-		Verbose(cpu, cart)
-	}
+	//if cpu.D.Verbose && cpu.D.Enable { 
+	//	Verbose(cpu, cart)
+	//}
 	
 	cpu.SwitchTimes++
 	
@@ -55,12 +55,6 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 	if cpu.Start >= cpu.End {
 		cpu.Running = false
 		return
-	}
-	
-	// Handle NMI Interruption
-	if cpu.IO.NMI {
-		nmi(cpu, cart)
-		cpu.IO.NMI = false		
 	}
 	
 	
@@ -1102,6 +1096,14 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 				}
 				
 				//cpu.Running = false
+	}
+	
+	// Handle NMI Interruption
+	if cpu.IO.NMI {
+		nmi(cpu, cart)
+		cpu.IO.NMI = false
+		Verbose(cpu, cart)
+		return	
 	}
 	
 }

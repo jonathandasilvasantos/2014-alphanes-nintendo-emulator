@@ -131,7 +131,7 @@ func RMPPU(IO *IOPorts, cart *cartridge.Cartridge, addr uint16) byte {
 
 func WMPPU(IO *IOPorts, cart *cartridge.Cartridge, addr uint16, value byte) {
 
-	//fmt.Printf("wrt %x : %x\n", addr, value)
+	
 
 	// Last bytes written
 	IO.PPUSTATUS.WRITTEN = value
