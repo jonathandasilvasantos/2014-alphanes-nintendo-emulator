@@ -21,8 +21,6 @@ package cpu
 import "zerojnt/cartridge"
 import "fmt"
 
-var firstNMI bool
-
 func nmi(cpu *CPU, cart *cartridge.Cartridge) {
 	
 	PushMemory (cpu, H(cpu.PC))
@@ -41,13 +39,13 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		return
 	}
 	
-	if cpu.D.Verbose && cpu.D.Enable{
+	//if cpu.D.Verbose && cpu.D.Enable { 
 		Verbose(cpu, cart)
-	}
+	//}
 	
 	cpu.SwitchTimes++
 	
-	if cpu.D.Enable{
+	if cpu.D.Enable {
 		DebugCompare(cpu, cart)
 	}
 	
@@ -57,6 +55,13 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 	if cpu.Start >= cpu.End {
 		cpu.Running = false
 		return
+	}
+	
+	// Handle NMI Interruption
+	if cpu.IO.NMI {
+		nmi(cpu, cart)
+		cpu.IO.NMI = false
+		return	
 	}
 	
 	
@@ -72,6 +77,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.CYC = 6
 		cpu.PC = cpu.PC + 2
 		break
+		
+		case 0x4: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+2
+			cpu.CYC = 2
+			break
 
 		
 	case 0x06: // ASL Zp
@@ -104,6 +115,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.CYC = 2
 		cpu.PC = cpu.PC + 1
 		break
+		
+		case 0x0C: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+3
+			cpu.CYC = 2
+			break
 		
 	case 0x0D: // Bit Abs
 		ORA(cpu, uint16(RM(cpu, cart, Abs(cpu, cart))))
@@ -316,6 +333,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.PC = cpu.PC + 2
 		break
 		
+		case 0x44: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+2
+			cpu.CYC = 2
+			break
+		
 		
 	case 0x45: // EOR Zp
 		EOR(cpu, uint16(RM(cpu, cart, Zp(cpu, cart))))
@@ -440,6 +463,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			ADC(cpu, uint16(RM(cpu, cart, IndX(cpu, cart))))
 			cpu.CYC = 6
 			cpu.PC = cpu.PC + 2
+			break
+			
+		case 0x64: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+2
+			cpu.CYC = 2
 			break
 			
 			
@@ -1096,21 +1125,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 				if cpu.D.Enable {
 					fmt.Printf("%s\n",cpu.D.Lines[cpu.SwitchTimes])
 				}
-								
-				cpu.Running = false
-	}
-	
-	// Handle NMI Interruption
-	if cpu.IO.NMI {
-		nmi(cpu, cart)
-		cpu.IO.NMI = false
-//		cpu.SwitchTimes = 0
-		firstNMI = true
-		return	
+				
+				//cpu.Running = false
 	}
 	
 }
 
 func Verbose(cpu *CPU, cart *cartridge.Cartridge) {
-	fmt.Printf("%4X  %2X  %2X %2X                       A:%2X X:%2X Y:%2X P:%2X SP:%2X CYC:%d SL: %d VRAM ADDR: %x PR: %x VRAM: %x\n", cpu.PC, RM(cpu, cart, cpu.PC), RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2), cpu.A, cpu.X, cpu.Y, cpu.P, cpu.SP, cpu.D.CURRENT_PPU.CYC, cpu.D.CURRENT_PPU.SCANLINE, cpu.IO.VRAM_ADDRESS, cpu.IO.PREVIOUS_READ, cpu.IO.PPU_RAM[cpu.IO.VRAM_ADDRESS] )
+	fmt.Printf("%4X  %2X  %2X %2X                       A:%2X X:%2X Y:%2X P:%2X SP:%2X CYC:%d SL: %d\n", cpu.PC, RM(cpu, cart, cpu.PC), RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2), cpu.A, cpu.X, cpu.Y, cpu.P, cpu.SP, cpu.D.CURRENT_PPU.CYC, cpu.D.CURRENT_PPU.SCANLINE )
 }
