@@ -151,6 +151,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		}
 		break
 		
+		case 0x14: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+2
+			cpu.CYC = 2
+			break
+		
 		
 	case 0x15: // ORA ZpX
 		ORA(cpu, uint16(RM(cpu, cart,ZpX(cpu, cart))))
@@ -180,6 +186,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.CYC++
 		}
 		break
+		
+		case 0x1A: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+1
+			cpu.CYC = 2
+			break
 		
 		
 	case 0x1D: // ORA AbsX
@@ -279,6 +291,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.CYC ++
 		}
 		break
+		
+		case 0x34: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+2
+			cpu.CYC = 2
+			break
 
 		
 	case 0x35: // AND ZpX
@@ -292,6 +310,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.CYC = 6
 		cpu.PC = cpu.PC + 2
 		break
+		
+		case 0x3A: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+1
+			cpu.CYC = 2
+			break
 
 
 		
@@ -407,6 +431,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			}
 			break
 			
+		case 0x54: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+2
+			cpu.CYC = 2
+			break
+			
 
 		case 0x55: // EOR ZpX
 			EOR(cpu, uint16(RM(cpu, cart,ZpX(cpu, cart))))
@@ -434,6 +464,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			if cpu.PageCrossed == 1 {
 				cpu.CYC++
 			}
+			break
+			
+		case 0x5A: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+1
+			cpu.CYC = 2
 			break
 			
 
@@ -539,6 +575,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 				cpu.CYC ++
 			}
 			break
+			
+		case 0x74: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+2
+			cpu.CYC = 2
+			break
 
 		case 0x75: // ADC ZpX
 			ADC(cpu, uint16(RM(cpu, cart, ZpX(cpu, cart))))
@@ -568,6 +610,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			}
 			break
 			
+		case 0x7A: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+1
+			cpu.CYC = 2
+			break
+			
 		case 0x7D: // ADC AbX
 			ADC(cpu, uint16(RM(cpu, cart,AbsX(cpu, cart))))
 			cpu.CYC = 4
@@ -581,6 +629,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			ROR(cpu, cart, AbsX(cpu, cart))
 			cpu.CYC = 7
 			cpu.PC = cpu.PC + 3
+			break
+			
+		case 0x80: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+2
+			cpu.CYC = 2
 			break
 
 
@@ -939,6 +993,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			}
 			break
 			
+		case 0xD4: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+2
+			cpu.CYC = 2
+			break
+			
 			
 		case 0xD5: // CMP ZpX
 			CMP	(cpu, uint16(RM(cpu, cart, ZpX(cpu, cart))))
@@ -967,6 +1027,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			if cpu.PageCrossed == 1 {
 				cpu.CYC++
 			}
+			break
+			
+		case 0xDA: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+1
+			cpu.CYC = 2
 			break
 			
 		case 0xDD: // CMP AbX
@@ -1068,6 +1134,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 				cpu.CYC ++
 			}
 			break
+			
+		case 0xF4: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+2
+			cpu.CYC = 2
+			break
 				
 
 		case 0xF5: // SBC ZpX
@@ -1097,6 +1169,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			if cpu.PageCrossed == 1 {
 				cpu.CYC++
 			}
+			break
+			
+		case 0xFA: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+1
+			cpu.CYC = 2
 			break
 			
 		case 0xFD: // SBC AbX
