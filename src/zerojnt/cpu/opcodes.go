@@ -41,13 +41,13 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		return
 	}
 	
-	//if cpu.D.Verbose && cpu.D.Enable  && firstNMI {
+	if cpu.D.Verbose && cpu.D.Enable{
 		Verbose(cpu, cart)
-	//}
+	}
 	
 	cpu.SwitchTimes++
 	
-	if cpu.D.Enable && firstNMI {
+	if cpu.D.Enable{
 		DebugCompare(cpu, cart)
 	}
 	
@@ -58,8 +58,6 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.Running = false
 		return
 	}
-	
-	fmt.Printf("E000: %x, E002 %x\n", RM(cpu, cart, 0xE000), RM(cpu, cart, 0xE002)   )
 	
 	
 	switch( RM(cpu, cart, cpu.PC) ) {
@@ -1106,7 +1104,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 	if cpu.IO.NMI {
 		nmi(cpu, cart)
 		cpu.IO.NMI = false
-		cpu.SwitchTimes = 0
+//		cpu.SwitchTimes = 0
 		firstNMI = true
 		return	
 	}

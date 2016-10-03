@@ -21,6 +21,8 @@ import "zerojnt/cartridge"
 import "log"
 
 func Zero (addr uint16, prgsize byte) (bool, uint16) {
+
+
 	
 	var prgrom bool = false
 
@@ -54,12 +56,8 @@ func Zero (addr uint16, prgsize byte) (bool, uint16) {
 		}
 	}
 		// Check the mirrors of (02007-0x2007) to (0x2008 - 0x3FFF)
-		i = 0
-		for (0x2000 + (i*8) < 0x3FFF ) {
-			if (addr >= 0x2000 + (8 * i) ) && (addr < 0x2000 + (8*(i+1)) ) {
-				addr = addr - (8*i)
-			}
-			i++
+		if addr >= 0x2008 && addr <= 0x3FFF {
+			addr = (addr % 8) + 0x2000
 		}
 	
 	return prgrom, addr

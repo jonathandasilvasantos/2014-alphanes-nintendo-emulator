@@ -22,20 +22,19 @@ import "zerojnt/cartridge"
 import "zerojnt/mapper"
 import "zerojnt/ioports"
 import "log"
-import "fmt"
 
 func RM(cpu *CPU, cart *cartridge.Cartridge, addr uint16) byte {
 
+	ppu_handle := addr >= 0x2000 && addr <= 0x3FFF 
 	prgrom, newaddr := mapper.MemoryMapper(cart, addr)
 	
 	
 
-	if newaddr >= 0x2000 && newaddr < 0x2008 {
+	if newaddr >= 0x2000 && newaddr < 0x2008 && ppu_handle {
 		return ioports.RMPPU(&cpu.IO, cart, newaddr)
 	}
 
 	if prgrom {
-	fmt.Printf("mapper prg: %x \n", newaddr)
 		return cart.PRG[newaddr]
 	} else {
 		return cpu.IO.CPU_RAM[newaddr]
@@ -44,8 +43,9 @@ func RM(cpu *CPU, cart *cartridge.Cartridge, addr uint16) byte {
 
 func WM(cpu *CPU, cart *cartridge.Cartridge, addr uint16, value byte) {
 
+	ppu_handle := addr >= 0x2000 && addr <= 0x3FFF
 	prgrom, newaddr := mapper.MemoryMapper(cart, addr)
-	if (newaddr >= 0x2000 && newaddr < 0x2008) || (newaddr == 0x4014) {
+	if ((newaddr >= 0x2000 && newaddr < 0x2008) || (newaddr == 0x4014) && ppu_handle) {
 		ioports.WMPPU(&cpu.IO, cart, newaddr, value)
 		return
 	}
