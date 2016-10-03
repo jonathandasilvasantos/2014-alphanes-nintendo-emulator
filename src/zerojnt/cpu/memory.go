@@ -22,10 +22,12 @@ import "zerojnt/cartridge"
 import "zerojnt/mapper"
 import "zerojnt/ioports"
 import "log"
+import "fmt"
 
 func RM(cpu *CPU, cart *cartridge.Cartridge, addr uint16) byte {
 
 	prgrom, newaddr := mapper.MemoryMapper(cart, addr)
+	
 	
 
 	if newaddr >= 0x2000 && newaddr < 0x2008 {
@@ -33,6 +35,7 @@ func RM(cpu *CPU, cart *cartridge.Cartridge, addr uint16) byte {
 	}
 
 	if prgrom {
+	fmt.Printf("mapper prg: %x \n", newaddr)
 		return cart.PRG[newaddr]
 	} else {
 		return cpu.IO.CPU_RAM[newaddr]

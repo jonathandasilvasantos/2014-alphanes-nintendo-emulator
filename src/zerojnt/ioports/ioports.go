@@ -77,17 +77,26 @@ type IOPorts struct {
 	PPUSTATUS PPU_STATUS
 	PPUSCROLL PPU_SCROLL
 	NMI bool
+	PREVIOUS_READ byte
 }
 
 func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
 	var io IOPorts
 	io.CPU_RAM = make([]byte, 0xFFFF)
+	
 	io.PPU_RAM = make([]byte, 0x4000)
+	
+	// Initial value of PAL
+	for q := 0; q < 32; q++ {
+		io.PPU_RAM[0x3F00+q] = 0x3F
+	}
+	
 	io.NMI = false
 	
 	io.PPUSTATUS.NMI_OCCURRED = false
 	io.PPUSTATUS.SPRITE_0_BIT = false
 	io.PPUSTATUS.SPRITE_OVERFLOW = false
+	io.PREVIOUS_READ = 0
 	
 
 	

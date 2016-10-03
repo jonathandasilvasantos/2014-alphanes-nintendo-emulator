@@ -78,7 +78,7 @@ func ResetCPU(cpu *CPU) {
 	
 
 
-	cpu.SP = 0xFD
+	cpu.SP = 0xFA
 	cpu.CYCSpecial = 0
 	cpu.Running = true
 	cpu.SwitchTimes = -1

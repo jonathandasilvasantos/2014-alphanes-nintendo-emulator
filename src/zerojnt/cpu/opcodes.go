@@ -21,6 +21,8 @@ package cpu
 import "zerojnt/cartridge"
 import "fmt"
 
+var firstNMI bool
+
 func nmi(cpu *CPU, cart *cartridge.Cartridge) {
 	
 	PushMemory (cpu, H(cpu.PC))
@@ -39,13 +41,13 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		return
 	}
 	
-	//if cpu.D.Verbose && cpu.D.Enable { 
-	//	Verbose(cpu, cart)
+	//if cpu.D.Verbose && cpu.D.Enable  && firstNMI {
+		Verbose(cpu, cart)
 	//}
 	
 	cpu.SwitchTimes++
 	
-	if cpu.D.Enable {
+	if cpu.D.Enable && firstNMI {
 		DebugCompare(cpu, cart)
 	}
 	
@@ -56,6 +58,8 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.Running = false
 		return
 	}
+	
+	fmt.Printf("E000: %x, E002 %x\n", RM(cpu, cart, 0xE000), RM(cpu, cart, 0xE002)   )
 	
 	
 	switch( RM(cpu, cart, cpu.PC) ) {
@@ -1094,20 +1098,21 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 				if cpu.D.Enable {
 					fmt.Printf("%s\n",cpu.D.Lines[cpu.SwitchTimes])
 				}
-				
-				//cpu.Running = false
+								
+				cpu.Running = false
 	}
 	
 	// Handle NMI Interruption
 	if cpu.IO.NMI {
 		nmi(cpu, cart)
 		cpu.IO.NMI = false
-		Verbose(cpu, cart)
+		cpu.SwitchTimes = 0
+		firstNMI = true
 		return	
 	}
 	
 }
 
 func Verbose(cpu *CPU, cart *cartridge.Cartridge) {
-	fmt.Printf("%4X  %2X  %2X %2X                       A:%2X X:%2X Y:%2X P:%2X SP:%2X CYC:%d SL: %d\n", cpu.PC, RM(cpu, cart, cpu.PC), RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2), cpu.A, cpu.X, cpu.Y, cpu.P, cpu.SP, cpu.D.CURRENT_PPU.CYC, cpu.D.CURRENT_PPU.SCANLINE )
+	fmt.Printf("%4X  %2X  %2X %2X                       A:%2X X:%2X Y:%2X P:%2X SP:%2X CYC:%d SL: %d VRAM ADDR: %x PR: %x VRAM: %x\n", cpu.PC, RM(cpu, cart, cpu.PC), RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2), cpu.A, cpu.X, cpu.Y, cpu.P, cpu.SP, cpu.D.CURRENT_PPU.CYC, cpu.D.CURRENT_PPU.SCANLINE, cpu.IO.VRAM_ADDRESS, cpu.IO.PREVIOUS_READ, cpu.IO.PPU_RAM[cpu.IO.VRAM_ADDRESS] )
 }

@@ -1,0 +1,375 @@
+E145  8D   7 20                       A:34 X: 0 Y: 0 P:25 SP:FA CYC:92 SL: 249 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+wrt ppu data: [2f14] = [34]
+E148  A9  3F 8D                       A:34 X: 0 Y: 0 P:25 SP:FA CYC:107 SL: 249 VRAM ADDR: 2f15 PR: 0 VRAM: 0
+E14A  8D   6 20                       A:3F X: 0 Y: 0 P:25 SP:FA CYC:116 SL: 249 VRAM ADDR: 2f15 PR: 0 VRAM: 0
+E14D  A9  14 8D                       A:3F X: 0 Y: 0 P:25 SP:FA CYC:131 SL: 249 VRAM ADDR: 2f15 PR: 0 VRAM: 0
+E14F  8D   6 20                       A:14 X: 0 Y: 0 P:25 SP:FA CYC:140 SL: 249 VRAM ADDR: 2f15 PR: 0 VRAM: 0
+E152  AD   7 20                       A:14 X: 0 Y: 0 P:25 SP:FA CYC:155 SL: 249 VRAM ADDR: 3f14 PR: 0 VRAM: 3f
+E155  A9  13 20                       A:3F X: 0 Y: 0 P:25 SP:FA CYC:170 SL: 249 VRAM ADDR: 3f15 PR: 34 VRAM: 3f
+E157  20  33 E0                       A:13 X: 0 Y: 0 P:25 SP:FA CYC:179 SL: 249 VRAM ADDR: 3f15 PR: 34 VRAM: 3f
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:25 SP:F8 CYC:200 SL: 249 VRAM ADDR: 3f15 PR: 34 VRAM: 3f
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:25 SP:F7 CYC:212 SL: 249 VRAM ADDR: 3f15 PR: 34 VRAM: 3f
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:25 SP:F7 CYC:221 SL: 249 VRAM ADDR: 3f15 PR: 34 VRAM: 3f
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:25 SP:F7 CYC:236 SL: 249 VRAM ADDR: 3f15 PR: 34 VRAM: 3f
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:25 SP:F8 CYC:251 SL: 249 VRAM ADDR: 3f15 PR: 34 VRAM: 3f
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:25 SP:F8 CYC:266 SL: 249 VRAM ADDR: 2f13 PR: 34 VRAM: 0
+E15A  AD   7 20                       A:13 X: 0 Y: 0 P:25 SP:FA CYC:287 SL: 249 VRAM ADDR: 2f13 PR: 34 VRAM: 0
+E15D  C9  34 20                       A:34 X: 0 Y: 0 P:25 SP:FA CYC:302 SL: 249 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E15F  20  2A E0                       A:34 X: 0 Y: 0 P:27 SP:FA CYC:311 SL: 249 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A:34 X: 0 Y: 0 P:27 SP:F8 CYC:332 SL: 249 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02C  60  F0  1                       A:34 X: 0 Y: 0 P:27 SP:F8 CYC:341 SL: 249 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E162  A9   1 85                       A:34 X: 0 Y: 0 P:27 SP:FA CYC:20 SL: 250 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E164  85  F0 4C                       A: 1 X: 0 Y: 0 P:25 SP:FA CYC:29 SL: 250 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E166  4C   0 E0                       A: 1 X: 0 Y: 0 P:25 SP:FA CYC:41 SL: 250 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 1 X: 0 Y: 0 P:25 SP:FA CYC:53 SL: 250 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 1 X: 0 Y: 0 P:35 SP:F7 CYC:77 SL: 250 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 1 X: 0 Y: 0 P:37 SP:F7 CYC:92 SL: 250 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0  0                       A: 1 X: 0 Y: 0 P:35 SP:FA CYC:113 SL: 250 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 1 X: 0 Y: 0 P:35 SP:F7 CYC:137 SL: 250 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 1 X: 0 Y: 0 P:37 SP:F7 CYC:152 SL: 250 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 1 X: 0 Y: 0 P:35 SP:FA CYC:173 SL: 250 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:37 SP:FA CYC:188 SL: 250 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:35 SP:FA CYC:197 SL: 250 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:35 SP:F8 CYC:218 SL: 250 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:35 SP:F7 CYC:230 SL: 250 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:35 SP:F7 CYC:239 SL: 250 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:35 SP:F7 CYC:254 SL: 250 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:35 SP:F8 CYC:269 SL: 250 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:35 SP:F8 CYC:284 SL: 250 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:35 SP:FA CYC:305 SL: 250 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:37 SP:FA CYC:320 SL: 250 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:FA CYC:329 SL: 250 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:F8 CYC:8 SL: 251 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:F8 CYC:20 SL: 251 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:F8 CYC:32 SL: 251 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:F5 CYC:56 SL: 251 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:F5 CYC:71 SL: 251 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0  0                       A: 0 X: 0 Y: 0 P:34 SP:F8 CYC:92 SL: 251 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:F5 CYC:116 SL: 251 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:F5 CYC:131 SL: 251 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 0 X: 0 Y: 0 P:34 SP:F8 CYC:152 SL: 251 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:36 SP:F8 CYC:167 SL: 251 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:34 SP:F8 CYC:176 SL: 251 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:34 SP:F6 CYC:197 SL: 251 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:34 SP:F5 CYC:209 SL: 251 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:34 SP:F5 CYC:218 SL: 251 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:34 SP:F5 CYC:233 SL: 251 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:34 SP:F6 CYC:248 SL: 251 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:34 SP:F6 CYC:263 SL: 251 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:34 SP:F8 CYC:284 SL: 251 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:36 SP:F8 CYC:299 SL: 251 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:F8 CYC:308 SL: 251 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:F6 CYC:329 SL: 251 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:F6 CYC:341 SL: 251 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:F6 CYC:11 SL: 252 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:F3 CYC:35 SL: 252 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:F3 CYC:50 SL: 252 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0  0                       A: 0 X: 0 Y: 0 P:34 SP:F6 CYC:71 SL: 252 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:F3 CYC:95 SL: 252 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:F3 CYC:110 SL: 252 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 0 X: 0 Y: 0 P:34 SP:F6 CYC:131 SL: 252 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:36 SP:F6 CYC:146 SL: 252 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:34 SP:F6 CYC:155 SL: 252 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:34 SP:F4 CYC:176 SL: 252 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:34 SP:F3 CYC:188 SL: 252 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:34 SP:F3 CYC:197 SL: 252 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:34 SP:F3 CYC:212 SL: 252 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:34 SP:F4 CYC:227 SL: 252 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:34 SP:F4 CYC:242 SL: 252 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:34 SP:F6 CYC:263 SL: 252 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:36 SP:F6 CYC:278 SL: 252 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:F6 CYC:287 SL: 252 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:F4 CYC:308 SL: 252 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:F4 CYC:320 SL: 252 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:F4 CYC:332 SL: 252 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:F1 CYC:14 SL: 253 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:F1 CYC:29 SL: 253 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0  0                       A: 0 X: 0 Y: 0 P:34 SP:F4 CYC:50 SL: 253 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:F1 CYC:74 SL: 253 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:F1 CYC:89 SL: 253 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 0 X: 0 Y: 0 P:34 SP:F4 CYC:110 SL: 253 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:36 SP:F4 CYC:125 SL: 253 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:34 SP:F4 CYC:134 SL: 253 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:34 SP:F2 CYC:155 SL: 253 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:34 SP:F1 CYC:167 SL: 253 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:34 SP:F1 CYC:176 SL: 253 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:34 SP:F1 CYC:191 SL: 253 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:34 SP:F2 CYC:206 SL: 253 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:34 SP:F2 CYC:221 SL: 253 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:34 SP:F4 CYC:242 SL: 253 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:36 SP:F4 CYC:257 SL: 253 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:F4 CYC:266 SL: 253 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:F2 CYC:287 SL: 253 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:F2 CYC:299 SL: 253 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:F2 CYC:311 SL: 253 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:EF CYC:335 SL: 253 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:EF CYC:8 SL: 254 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0  0                       A: 0 X: 0 Y: 0 P:34 SP:F2 CYC:29 SL: 254 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:EF CYC:53 SL: 254 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:EF CYC:68 SL: 254 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 0 X: 0 Y: 0 P:34 SP:F2 CYC:89 SL: 254 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:36 SP:F2 CYC:104 SL: 254 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:34 SP:F2 CYC:113 SL: 254 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:34 SP:F0 CYC:134 SL: 254 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:34 SP:EF CYC:146 SL: 254 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:34 SP:EF CYC:155 SL: 254 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:34 SP:EF CYC:170 SL: 254 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:34 SP:F0 CYC:185 SL: 254 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:34 SP:F0 CYC:200 SL: 254 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:34 SP:F2 CYC:221 SL: 254 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:36 SP:F2 CYC:236 SL: 254 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:F2 CYC:245 SL: 254 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:F0 CYC:266 SL: 254 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:F0 CYC:278 SL: 254 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:F0 CYC:290 SL: 254 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:ED CYC:314 SL: 254 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:ED CYC:329 SL: 254 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0  0                       A: 0 X: 0 Y: 0 P:34 SP:F0 CYC:8 SL: 255 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:ED CYC:32 SL: 255 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:ED CYC:47 SL: 255 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 0 X: 0 Y: 0 P:34 SP:F0 CYC:68 SL: 255 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:36 SP:F0 CYC:83 SL: 255 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:34 SP:F0 CYC:92 SL: 255 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:34 SP:EE CYC:113 SL: 255 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:34 SP:ED CYC:125 SL: 255 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:34 SP:ED CYC:134 SL: 255 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:34 SP:ED CYC:149 SL: 255 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:34 SP:EE CYC:164 SL: 255 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:34 SP:EE CYC:179 SL: 255 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:34 SP:F0 CYC:200 SL: 255 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:36 SP:F0 CYC:215 SL: 255 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:F0 CYC:224 SL: 255 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:EE CYC:245 SL: 255 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:EE CYC:257 SL: 255 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:EE CYC:269 SL: 255 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:EB CYC:293 SL: 255 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:EB CYC:308 SL: 255 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0  0                       A: 0 X: 0 Y: 0 P:34 SP:EE CYC:329 SL: 255 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:EB CYC:11 SL: 256 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:EB CYC:26 SL: 256 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 0 X: 0 Y: 0 P:34 SP:EE CYC:47 SL: 256 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:36 SP:EE CYC:62 SL: 256 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:34 SP:EE CYC:71 SL: 256 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:34 SP:EC CYC:92 SL: 256 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:34 SP:EB CYC:104 SL: 256 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:34 SP:EB CYC:113 SL: 256 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:34 SP:EB CYC:128 SL: 256 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:34 SP:EC CYC:143 SL: 256 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:34 SP:EC CYC:158 SL: 256 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:34 SP:EE CYC:179 SL: 256 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:36 SP:EE CYC:194 SL: 256 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:EE CYC:203 SL: 256 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:EC CYC:224 SL: 256 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:EC CYC:236 SL: 256 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:EC CYC:248 SL: 256 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:E9 CYC:272 SL: 256 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:E9 CYC:287 SL: 256 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0  0                       A: 0 X: 0 Y: 0 P:34 SP:EC CYC:308 SL: 256 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:E9 CYC:332 SL: 256 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:E9 CYC:5 SL: 257 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 0 X: 0 Y: 0 P:34 SP:EC CYC:26 SL: 257 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:36 SP:EC CYC:41 SL: 257 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:34 SP:EC CYC:50 SL: 257 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:34 SP:EA CYC:71 SL: 257 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:34 SP:E9 CYC:83 SL: 257 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:34 SP:E9 CYC:92 SL: 257 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:34 SP:E9 CYC:107 SL: 257 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:34 SP:EA CYC:122 SL: 257 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:34 SP:EA CYC:137 SL: 257 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:34 SP:EC CYC:158 SL: 257 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:36 SP:EC CYC:173 SL: 257 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:EC CYC:182 SL: 257 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:EA CYC:203 SL: 257 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:EA CYC:215 SL: 257 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:EA CYC:227 SL: 257 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:E7 CYC:251 SL: 257 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:E7 CYC:266 SL: 257 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0  0                       A: 0 X: 0 Y: 0 P:34 SP:EA CYC:287 SL: 257 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:E7 CYC:311 SL: 257 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:E7 CYC:326 SL: 257 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 0 X: 0 Y: 0 P:34 SP:EA CYC:5 SL: 258 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:36 SP:EA CYC:20 SL: 258 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:34 SP:EA CYC:29 SL: 258 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:34 SP:E8 CYC:50 SL: 258 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:34 SP:E7 CYC:62 SL: 258 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:34 SP:E7 CYC:71 SL: 258 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:34 SP:E7 CYC:86 SL: 258 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:34 SP:E8 CYC:101 SL: 258 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:34 SP:E8 CYC:116 SL: 258 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:34 SP:EA CYC:137 SL: 258 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:36 SP:EA CYC:152 SL: 258 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:EA CYC:161 SL: 258 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:E8 CYC:182 SL: 258 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:E8 CYC:194 SL: 258 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:E8 CYC:206 SL: 258 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:E5 CYC:230 SL: 258 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:E5 CYC:245 SL: 258 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0  0                       A: 0 X: 0 Y: 0 P:34 SP:E8 CYC:266 SL: 258 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:E5 CYC:290 SL: 258 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:E5 CYC:305 SL: 258 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 0 X: 0 Y: 0 P:34 SP:E8 CYC:326 SL: 258 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:36 SP:E8 CYC:341 SL: 258 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:34 SP:E8 CYC:8 SL: 259 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:34 SP:E6 CYC:29 SL: 259 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:34 SP:E5 CYC:41 SL: 259 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:34 SP:E5 CYC:50 SL: 259 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:34 SP:E5 CYC:65 SL: 259 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:34 SP:E6 CYC:80 SL: 259 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:34 SP:E6 CYC:95 SL: 259 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:34 SP:E8 CYC:116 SL: 259 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:36 SP:E8 CYC:131 SL: 259 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:E8 CYC:140 SL: 259 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:E6 CYC:161 SL: 259 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:E6 CYC:173 SL: 259 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:E6 CYC:185 SL: 259 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:E3 CYC:209 SL: 259 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:E3 CYC:224 SL: 259 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0  0                       A: 0 X: 0 Y: 0 P:34 SP:E6 CYC:245 SL: 259 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:E3 CYC:269 SL: 259 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:E3 CYC:284 SL: 259 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 0 X: 0 Y: 0 P:34 SP:E6 CYC:305 SL: 259 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:36 SP:E6 CYC:320 SL: 259 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:34 SP:E6 CYC:329 SL: 259 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:34 SP:E4 CYC:8 SL: 260 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:34 SP:E3 CYC:20 SL: 260 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:34 SP:E3 CYC:29 SL: 260 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:34 SP:E3 CYC:44 SL: 260 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:34 SP:E4 CYC:59 SL: 260 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:34 SP:E4 CYC:74 SL: 260 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:34 SP:E6 CYC:95 SL: 260 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:36 SP:E6 CYC:110 SL: 260 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:E6 CYC:119 SL: 260 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:E4 CYC:140 SL: 260 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:E4 CYC:152 SL: 260 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:E4 CYC:164 SL: 260 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:E1 CYC:188 SL: 260 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:E1 CYC:203 SL: 260 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0   0   0 34                       A: 0 X: 0 Y: 0 P:34 SP:E4 CYC:224 SL: 260 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:E1 CYC:248 SL: 260 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:E1 CYC:263 SL: 260 VRAM ADDR: 0 PR: 0 VRAM: 0
+E101  AD   7 20                       A: 0 X: 0 Y: 0 P:34 SP:E4 CYC:284 SL: 260 VRAM ADDR: 0 PR: 0 VRAM: 0
+E104  A9  13 20                       A: 0 X: 0 Y: 0 P:36 SP:E4 CYC:299 SL: 260 VRAM ADDR: 1 PR: 0 VRAM: 0
+E106  20  33 E0                       A:13 X: 0 Y: 0 P:34 SP:E4 CYC:308 SL: 260 VRAM ADDR: 1 PR: 0 VRAM: 0
+E033  48  A9 2F                       A:13 X: 0 Y: 0 P:34 SP:E2 CYC:329 SL: 260 VRAM ADDR: 1 PR: 0 VRAM: 0
+E034  A9  2F 8D                       A:13 X: 0 Y: 0 P:34 SP:E1 CYC:341 SL: 260 VRAM ADDR: 1 PR: 0 VRAM: 0
+E036  8D   6 20                       A:2F X: 0 Y: 0 P:34 SP:E1 CYC:8 SL: 261 VRAM ADDR: 1 PR: 0 VRAM: 0
+E039  68  8D  6                       A:2F X: 0 Y: 0 P:34 SP:E1 CYC:23 SL: 261 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03A  8D   6 20                       A:13 X: 0 Y: 0 P:34 SP:E2 CYC:38 SL: 261 VRAM ADDR: 1 PR: 0 VRAM: 0
+E03D  60  A9 32                       A:13 X: 0 Y: 0 P:34 SP:E2 CYC:53 SL: 261 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E109  AD   7 20                       A:13 X: 0 Y: 0 P:34 SP:E4 CYC:74 SL: 261 VRAM ADDR: 2f13 PR: 0 VRAM: 0
+E10C  C9  9A 20                       A: 0 X: 0 Y: 0 P:36 SP:E4 CYC:89 SL: 261 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E10E  20  2A E0                       A: 0 X: 0 Y: 0 P:34 SP:E4 CYC:98 SL: 261 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E02A  D0   4 60                       A: 0 X: 0 Y: 0 P:34 SP:E2 CYC:119 SL: 261 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E030  4C   0 E0                       A: 0 X: 0 Y: 0 P:34 SP:E2 CYC:131 SL: 261 VRAM ADDR: 2f14 PR: 0 VRAM: 34
+E000   0   0 13                       A: 0 X: 0 Y: 0 P:34 SP:E2 CYC:143 SL: 261 VRAM ADDR: 0 PR: 0 VRAM: 0
+E026  2C  15 40                       A: 0 X: 0 Y: 0 P:34 SP:DF CYC:167 SL: 261 VRAM ADDR: 0 PR: 0 VRAM: 0
+E029  40  D0  4                       A: 0 X: 0 Y: 0 P:36 SP:DF CYC:182 SL: 261 VRAM ADDR: 0 PR: 0 VRAM: 0
+ 1E0  34  E0  1                       A: 0 X: 0 Y: 0 P:34 SP:E2 CYC:203 SL: 261 VRAM ADDR: 0 PR: 0 VRAM: 0
+Opcode not supported: 34 
+
+
+
+
+
+
+ 
+E145  8D 07 20  STA $2007 = FF                  A:34 X:00 Y:00 P:25 SP:FA CYC:160 SL:247
+E148  A9 3F     LDA #$3F                        A:34 X:00 Y:00 P:25 SP:FA CYC:172 SL:247
+E14A  8D 06 20  STA $2006 = FF                  A:3F X:00 Y:00 P:25 SP:FA CYC:178 SL:247
+E14D  A9 14     LDA #$14                        A:3F X:00 Y:00 P:25 SP:FA CYC:190 SL:247
+E14F  8D 06 20  STA $2006 = FF                  A:14 X:00 Y:00 P:25 SP:FA CYC:196 SL:247
+E152  AD 07 20  LDA $2007 = FF                  A:14 X:00 Y:00 P:25 SP:FA CYC:208 SL:247
+E155  A9 13     LDA #$13                        A:3F X:00 Y:00 P:25 SP:FA CYC:220 SL:247
+E157  20 33 E0  JSR $E033                       A:13 X:00 Y:00 P:25 SP:FA CYC:226 SL:247
+E033  48        PHA                             A:13 X:00 Y:00 P:25 SP:F8 CYC:244 SL:247
+E034  A9 2F     LDA #$2F                        A:13 X:00 Y:00 P:25 SP:F7 CYC:253 SL:247
+E036  8D 06 20  STA $2006 = FF                  A:2F X:00 Y:00 P:25 SP:F7 CYC:259 SL:247
+E039  68        PLA                             A:2F X:00 Y:00 P:25 SP:F7 CYC:271 SL:247
+E03A  8D 06 20  STA $2006 = FF                  A:13 X:00 Y:00 P:25 SP:F8 CYC:283 SL:247
+E03D  60        RTS                             A:13 X:00 Y:00 P:25 SP:F8 CYC:295 SL:247
+E15A  AD 07 20  LDA $2007 = FF                  A:13 X:00 Y:00 P:25 SP:FA CYC:313 SL:247
+E15D  C9 34     CMP #$34                        A:34 X:00 Y:00 P:25 SP:FA CYC:325 SL:247
+E15F  20 2A E0  JSR $E02A                       A:34 X:00 Y:00 P:27 SP:FA CYC:331 SL:247
+E02A  D0 04     BNE $E030                       A:34 X:00 Y:00 P:27 SP:F8 CYC:  8 SL:248
+E02C  60        RTS                             A:34 X:00 Y:00 P:27 SP:F8 CYC: 14 SL:248
+E162  A9 01     LDA #$01                        A:34 X:00 Y:00 P:27 SP:FA CYC: 32 SL:248
+E164  85 F0     STA $F0 = 07                    A:01 X:00 Y:00 P:25 SP:FA CYC: 38 SL:248
+E166  4C 00 E0  JMP $E000                       A:01 X:00 Y:00 P:25 SP:FA CYC: 47 SL:248
+E000  A9 00     LDA #$00                        A:01 X:00 Y:00 P:25 SP:FA CYC: 56 SL:248
+E002  8D 00 20  STA $2000 = FF                  A:00 X:00 Y:00 P:27 SP:FA CYC: 62 SL:248
+E005  20 84 E4  JSR $E484                       A:00 X:00 Y:00 P:27 SP:FA CYC: 74 SL:248
+E484  4C 98 E1  JMP $E198                       A:00 X:00 Y:00 P:27 SP:F8 CYC: 92 SL:248
+E198  A9 A1     LDA #$A1                        A:00 X:00 Y:00 P:27 SP:F8 CYC:101 SL:248
+E19A  8D F0 07  STA $07F0 = 00                  A:A1 X:00 Y:00 P:A5 SP:F8 CYC:107 SL:248
+E19D  20 12 E4  JSR $E412                       A:A1 X:00 Y:00 P:A5 SP:F8 CYC:119 SL:248
+E412  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:A5 SP:F6 CYC:137 SL:248
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:149 SL:248
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:161 SL:248
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:170 SL:248
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:182 SL:248
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:191 SL:248
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:203 SL:248
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:212 SL:248
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:224 SL:248
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:233 SL:248
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:245 SL:248
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:254 SL:248
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:266 SL:248
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:275 SL:248
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:287 SL:248
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:296 SL:248
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:308 SL:248
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:317 SL:248
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:329 SL:248
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:338 SL:248
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:  9 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC: 18 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC: 30 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC: 39 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC: 51 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC: 60 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC: 72 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC: 81 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC: 93 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:102 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:114 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:123 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:135 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:144 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:156 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:165 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:177 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:186 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:198 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:207 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:219 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:228 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:240 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:249 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:261 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:270 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:282 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:291 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:303 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:312 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:324 SL:249
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:333 SL:249
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:  4 SL:250
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC: 13 SL:250
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC: 25 SL:250
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC: 34 SL:250
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC: 46 SL:250
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC: 55 SL:250
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC: 67 SL:250
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC: 76 SL:250
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC: 88 SL:250
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC: 97 SL:250
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:109 SL:250
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:118 SL:250
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:130 SL:250
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:139 SL:250
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:151 SL:250
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:160 SL:250
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:172 SL:250
+E415  2C 02 20  BIT $2002 = FF                  A:A1 X:00 Y:00 P:27 SP:F6 CYC:181 SL:250
+E418  10 FB     BPL $E415                       A:A1 X:00 Y:00 P:27 SP:F6 CYC:193 SL:250

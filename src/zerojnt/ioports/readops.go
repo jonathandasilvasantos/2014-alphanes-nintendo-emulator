@@ -60,8 +60,23 @@ func READ_OAMDATA(IO *IOPorts) byte {
 
 func READ_PPUDATA(IO *IOPorts, cart *cartridge.Cartridge) byte {
 
+	
 
-	var result byte = IO.PPU_RAM[ mapper.PPU (IO.VRAM_ADDRESS) ]
+	var newaddr uint16 = mapper.PPU (IO.VRAM_ADDRESS)
+
+
+	var request byte = IO.PPU_RAM[ newaddr ]
+	var result byte = IO.PREVIOUS_READ
+	
+	if newaddr < 0x3F00 {
+		IO.PREVIOUS_READ = request
+	} else {
+		IO.PREVIOUS_READ = IO.PPU_RAM[ newaddr - 0x1000 ]
+		result = request
+	}
+	
+	//fmt.Printf("rnd [%x] = %x \n", newaddr, result)	
 	IO.VRAM_ADDRESS += IO.PPUCTRL.VRAM_INCREMENT
+
 	return result
 }

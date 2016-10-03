@@ -83,8 +83,8 @@ func PPU(addr uint16) uint16 {
 		return addr - 0x1000
 	}
 	
-	if (addr >= 0x3F20 && addr <= 0x3FFF) {
-		return addr - 32
+	if (addr >= 0x3F00 && addr <= 0x3FFF) {
+		return 0x3F00 + (addr%32)
 	}
 	
 	if (addr >= 0x4000) {
