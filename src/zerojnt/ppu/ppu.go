@@ -124,7 +124,7 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 	if (ppu.SCANLINE < 0) && (ppu.CYC <= 0) {
 		ppu.SCANLINE = 0
 		ppu.CYC = 0
-		//ppu.IO.PPUSTATUS.SPRITE_0_BIT = false
+		ppu.IO.PPUSTATUS.SPRITE_0_BIT = false
 
 		return
 	}
@@ -132,7 +132,7 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 	if ppu.CYC >= 0 && ppu.CYC < 256 && ppu.VISIBLE_SCANLINE {
 	
 	if ppu.CYC == 2 {
-		//ppu.IO.PPUSTATUS.SPRITE_0_BIT = true
+		ppu.IO.PPUSTATUS.SPRITE_0_BIT = true
 	}
 	
 		
@@ -268,6 +268,7 @@ func fetchNametable(ppu *PPU, x uint16, y uint16) {
  
 	absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*32)  )
 	ppu.NAMETABLE = ppu.IO.PPU_RAM[ absolute_addr ]
+	
 }
 
 func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {

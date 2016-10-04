@@ -49,12 +49,14 @@ func Zero (addr uint16, prgsize byte) (bool, uint16) {
 	}
 	
 	// Check the three mirrors of (0x0000-0x07FF) at (0x0800 - 0x2000)
-	var i uint16
-	for i=0; i<3; i++ {
-		if (addr >= 0x0800 + (0x0800 * i) ) && (addr < 0x0800 + (0x0800*(i+1)) ) {
-			addr = addr - (0x0800*(i+1))
+
+	
+		if addr >= 0x0000 && addr < 0x2000 {
+			addr = addr % 0x0800
 		}
-	}
+			
+		
+	
 		// Check the mirrors of (02007-0x2007) to (0x2008 - 0x3FFF)
 		if addr >= 0x2008 && addr <= 0x3FFF {
 			addr = (addr % 8) + 0x2000

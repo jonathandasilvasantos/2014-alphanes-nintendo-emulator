@@ -116,7 +116,7 @@ func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
 
 func RMPPU(IO *IOPorts, cart *cartridge.Cartridge, addr uint16) byte {
 
-	//fmt.Printf("rd %x\n", addr)
+
 
 	switch(addr) {
 	
@@ -139,6 +139,8 @@ func RMPPU(IO *IOPorts, cart *cartridge.Cartridge, addr uint16) byte {
 
 
 func WMPPU(IO *IOPorts, cart *cartridge.Cartridge, addr uint16, value byte) {
+
+			
 
 	
 

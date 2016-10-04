@@ -20,7 +20,7 @@ package ioports
 
 import "zerojnt/cartridge"
 import "zerojnt/mapper"
-import "fmt"
+
 
 func WRITE_PPUCTRL(IO *IOPorts, value byte) {
 
@@ -160,7 +160,7 @@ func WRITE_PPUADDR(IO *IOPorts, value byte) {
 
 func WRITE_PPUDATA(IO *IOPorts, cart *cartridge.Cartridge, value byte) {
 	
-	fmt.Printf("wrt ppu data: [%x] = [%x]\n", mapper.PPU(IO.VRAM_ADDRESS), value)
+	
 	IO.PPU_RAM[ mapper.PPU(IO.VRAM_ADDRESS) ] = value
 	IO.VRAM_ADDRESS += IO.PPUCTRL.VRAM_INCREMENT
 }

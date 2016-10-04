@@ -58,7 +58,7 @@ import "os"
 		Nescpu.IO = ioports.StartIOPorts(&Cart)
 		Nescpu.D = Debug
 		Nescpu.D.Verbose = true
-//		cpu.SetResetVector(&Nescpu, &Cart)
+		cpu.SetResetVector(&Nescpu, &Cart)
 
 		Nesppu = ppu.StartPPU(&Nescpu.IO)
 		Nescpu.D.CURRENT_PPU = &Nesppu
@@ -83,7 +83,7 @@ func emulate() {
 			ppudelay = ppudelay + 1
 		} else {
 			for x := 0; x < 3; x++ {
-				//ppu.Process(&Nesppu, &Cart)
+				ppu.Process(&Nesppu, &Cart)
 			}
 		}
 		

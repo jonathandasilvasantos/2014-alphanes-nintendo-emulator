@@ -39,9 +39,9 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		return
 	}
 	
-	//if cpu.D.Verbose && cpu.D.Enable { 
+	if cpu.D.Verbose && cpu.D.Enable { 
 		Verbose(cpu, cart)
-	//}
+	}
 	
 	cpu.SwitchTimes++
 	
@@ -192,6 +192,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.PC = cpu.PC+1
 			cpu.CYC = 2
 			break
+			
+		case 0x1C: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+3
+			cpu.CYC = 2
+			break
 		
 		
 	case 0x1D: // ORA AbsX
@@ -333,6 +339,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.CYC++
 		}
 		break
+		
+		case 0x3C: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+3
+			cpu.CYC = 2
+			break
 
 		
 	case 0x3D: // AND AbsX
@@ -469,6 +481,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		case 0x5A: // Nop - No Operation
 			NOP()
 			cpu.PC = cpu.PC+1
+			cpu.CYC = 2
+			break
+			
+		case 0x5C: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+3
 			cpu.CYC = 2
 			break
 			
@@ -613,6 +631,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		case 0x7A: // Nop - No Operation
 			NOP()
 			cpu.PC = cpu.PC+1
+			cpu.CYC = 2
+			break
+			
+		case 0x7C: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+3
 			cpu.CYC = 2
 			break
 			
@@ -1035,6 +1059,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.CYC = 2
 			break
 			
+		case 0xDC: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+3
+			cpu.CYC = 2
+			break
+			
 		case 0xDD: // CMP AbX
 			CMP(cpu, uint16(RM(cpu, cart,AbsX(cpu, cart))))
 			cpu.CYC = 4
@@ -1162,6 +1192,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.PC = cpu.PC+1
 			break
 			
+		case 0xFC: // Nop - No Operation
+			NOP()
+			cpu.PC = cpu.PC+3
+			cpu.CYC = 2
+			break
+			
 		case 0xF9: // SBC AbsY
 			SBC(cpu, uint16(RM(cpu, cart, AbsY(cpu, cart))))
 			cpu.CYC = 4
@@ -1204,7 +1240,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 					fmt.Printf("%s\n",cpu.D.Lines[cpu.SwitchTimes])
 				}
 				
-				//cpu.Running = false
+				cpu.Running = false
 	}
 	
 }
