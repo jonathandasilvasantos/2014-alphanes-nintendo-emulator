@@ -140,7 +140,7 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 		var y uint16 = uint16(ppu.SCANLINE%240)/8
 		
 		handleBackground(ppu, x, y)
-		handleSprite(ppu, x, y)
+		//handleSprite(ppu, x, y)
 		
 	}
 	
@@ -232,23 +232,23 @@ func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 
 	var result [8][8]byte
 	
-	
-	
+		
+
 	
 	for y := 0; y < 16; y+=2 {
 	
-			var addr uint16 = base_addr + uint16(index)
+			var addr uint16 = base_addr + uint16( uint16(index) * 16)
 			tile_addr := addr + uint16(y)
 			
 			
 			
 			
 			var a byte = ppu.IO.PPU_RAM[ tile_addr ]
-			var b byte = ppu.IO.PPU_RAM[ tile_addr+1 ]
+//			var b byte = ppu.IO.PPU_RAM[ tile_addr+1 ]
 			
 			for x := 0; x < 8; x++ {
 				xa := (a << byte(x)) >> 7
-				xb := (b << byte(x)) >> 7
+				xb := (a << byte(x)) >> 7
 				
 			
 				
@@ -267,7 +267,9 @@ func fetchNametable(ppu *PPU, x uint16, y uint16) {
 
  
 	absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*32)  )
+	//fmt.Printf("%x\n", absolute_addr)
 	ppu.NAMETABLE = ppu.IO.PPU_RAM[ absolute_addr ]
+//	ppu.NAMETABLE = 0x6F
 	
 }
 
