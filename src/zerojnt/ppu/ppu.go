@@ -124,16 +124,14 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 	if (ppu.SCANLINE < 0) && (ppu.CYC <= 0) {
 		ppu.SCANLINE = 0
 		ppu.CYC = 0
-		ppu.IO.PPUSTATUS.SPRITE_0_BIT = false
-
 		return
 	}
 	
 	if ppu.CYC >= 0 && ppu.CYC < 256 && ppu.VISIBLE_SCANLINE {
 	
-	if ppu.CYC == 2 {
-		ppu.IO.PPUSTATUS.SPRITE_0_BIT = true
-	}
+	
+
+	
 	
 		
 		var x uint16 = uint16(ppu.CYC%256)/8
