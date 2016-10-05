@@ -119,6 +119,13 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 	checkKeyboard()
 	checkVisibleScanline(ppu)
 	
+	if (ppu.VISIBLE_SCANLINE) {
+	
+		var x uint16 = uint16(ppu.CYC%256)
+		var y uint16 = uint16(ppu.SCANLINE%240)	
+		checkSprite0Bit(ppu, x, y)
+	}
+	
 
 	
 	if (ppu.SCANLINE < 0) && (ppu.CYC <= 0) {
@@ -395,4 +402,37 @@ func handleSprite(ppu *PPU, x uint16, y uint16) {
 					drawTile(ppu, pos_x, pos_y, ind, ppu.IO.PPUCTRL.SPRITE_8_ADDR, flipX, flipY, true)
 					
 				} 
+}
+
+func checkSprite0Bit(ppu *PPU, x uint16, y uint16) {
+
+if(ppu.IO.PPUSTATUS.SPRITE_0_BIT == true) { return }
+
+	pos_y := uint16( ppu.IO.PPU_OAM[0])
+	pos_x := uint16( ppu.IO.PPU_OAM[3] )
+	ind := ppu.IO.PPU_OAM[1]
+	
+	matchVertical := pos_y >= y && (pos_y+8) <= y
+	matchHorizontal := pos_x >= y && (pos_x+8) <= x
+	
+	//fmt.Printf("spr_x: %d x: %d, spr_y: %d y: %d\n", pos_x, x, pos_y, y)
+	
+	if matchVertical == false || matchHorizontal == false { return }
+	fmt.Printf("match!\n")
+	
+	deltaX := pos_x - x
+	deltaY := pos_y - y
+	
+	sprite_tile := fetchTile(ppu, ind,  ppu.IO.PPUCTRL.SPRITE_8_ADDR )
+	fetchNametable(ppu, x/8, y/8)
+	bg_tile := fetchTile(ppu, ind,  ppu.IO.PPUCTRL.BACKGROUND_ADDR )
+	
+	if sprite_tile[deltaX][deltaY] != 0 && bg_tile[x%8][y%8] != 0 {
+		ppu.IO.PPUSTATUS.SPRITE_0_BIT = true
+		fmt.Printf("Sprite zero!\n")
+	}
+	
+	
+	
+
 }
