@@ -35,7 +35,6 @@ type PPU_STATUS struct {
 type PPU_SCROLL struct {
 	X byte
 	Y byte
-	NEXT_WRITES_Y bool
 }
 
 type PPU_MASK struct {

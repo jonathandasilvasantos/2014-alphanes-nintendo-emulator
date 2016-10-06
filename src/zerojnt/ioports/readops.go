@@ -47,6 +47,7 @@ func READ_PPUSTATUS(IO *IOPorts) byte {
 	IO.PPUSCROLL.X = 0
 	IO.PPUSTATUS.SPRITE_0_BIT = false
 	IO.PPUSCROLL.Y = 0
+	IO.PPU_MEMORY_STEP = 0
 	IO.VRAM_ADDRESS = 0
 	
 	return result	
