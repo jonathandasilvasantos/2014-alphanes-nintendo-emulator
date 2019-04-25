@@ -60,7 +60,6 @@ type PPU struct {
 
 var window *sdl.Window
 var renderer *sdl.Renderer
-var event sdl.Event
 var xx int
 
 func StartPPU(IO *ioports.IOPorts) PPU {
@@ -99,16 +98,14 @@ func checkVisibleScanline(ppu *PPU) {
 }
 
 func checkKeyboard() {
-	for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-		switch t := event.(type) {
-			case *sdl.KeyDownEvent:
-			if t.Keysym.Sym == 27 {
-			fmt.Printf("[%d ms] Keyboard\ttype:%d\tsym:%d\tmodifiers:%d\tstate:%d\trepeat:%d\n",t.Timestamp, t.Type, t.Keysym.Sym, t.Keysym.Mod, t.State, t.Repeat)
+for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+			switch event.(type) {
+			case *sdl.QuitEvent:
+				println("Quit")
 				os.Exit(0)
-			}			
-			break
+				break
+			}
 		}
-	}
 }
 
 
@@ -214,7 +211,7 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 func initCanvas() {
 
 	var winTitle string = "Alphanes"
-	var winWidth, winHeight int = 256, 240
+	var winWidth, winHeight int32 = 256, 240
 
 	
 
@@ -336,7 +333,9 @@ func ShowScreen(ppu *PPU) {
 			if c == 1 { renderer.SetDrawColor(128, 128, 128, 255) }
 			if c == 2 { renderer.SetDrawColor(190, 190, 190, 255) }
 			if c == 3 { renderer.SetDrawColor(255, 255, 255, 255) }
-			renderer.DrawPoint(x,y)
+			var ox int32 = int32(x)
+			var oy int32 = int32(y)
+			renderer.DrawPoint(ox, oy)
 			
 		}
 	}
