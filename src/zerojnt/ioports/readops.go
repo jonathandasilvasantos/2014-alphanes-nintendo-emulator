@@ -56,7 +56,6 @@ func READ_PPUSTATUS(IO *IOPorts) byte {
 func READ_OAMDATA(IO *IOPorts) byte {
 
 		var result byte = IO.PPU_OAM[IO.PPU_OAM_ADDRESS]
-		IO.PPU_OAM_ADDRESS++
 		return result
 }
 
