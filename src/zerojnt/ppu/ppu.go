@@ -23,7 +23,7 @@ import "zerojnt/cartridge"
 //import "zerojnt/mapper"
 import "zerojnt/ioports"
 import "os"
-import "os/exec"
+import "math/rand"
 
 import "github.com/veandco/go-sdl2/sdl"
 
@@ -70,13 +70,6 @@ func StartPPU(IO *ioports.IOPorts) PPU {
 	initCanvas()
 	
 	
-
-
-	
-
-
-
-	
 	
 	ppu.CYC = 0
 	ppu.SCANLINE = 241
@@ -87,15 +80,6 @@ func StartPPU(IO *ioports.IOPorts) PPU {
 	return ppu
 }
 
-func checkVisibleScanline(ppu *PPU) {
-
-	if ppu.SCANLINE >= 0 || ppu.SCANLINE < 240 {
-		ppu.VISIBLE_SCANLINE = true
-	} else {
-		ppu.VISIBLE_SCANLINE = false
-	}
-
-}
 
 func checkKeyboard() {
 for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
@@ -114,100 +98,9 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 
 
 	checkKeyboard()
-	checkVisibleScanline(ppu)
-	
-	if (ppu.VISIBLE_SCANLINE) {
-	
-		var x uint16 = uint16(ppu.CYC%256)
-		var y uint16 = uint16(ppu.SCANLINE%240)	
-		checkSprite0Bit(ppu, x, y)
-	}
-	
-
-	
-	if (ppu.SCANLINE < 0) && (ppu.CYC <= 0) {
-		ppu.SCANLINE = 0
-		ppu.CYC = 0
-		return
-	}
-	
-	if ppu.CYC >= 0 && ppu.CYC < 256 && ppu.VISIBLE_SCANLINE {
-	
-	
-
-	
-	
-		
-		var x uint16 = uint16(ppu.CYC%256)/8
-		var y uint16 = uint16(ppu.SCANLINE%240)/8
-		
-		handleBackground(ppu, x, y)
-		//handleSprite(ppu, x, y)
-		
-	}
-	
-	
-	
-
-
-	
-		if ppu.NMI_DELAY > 0 && ppu.IO.PPUSTATUS.NMI_OCCURRED == true && ppu.IO.PPUCTRL.GEN_NMI == true {
-		
-			ppu.NMI_DELAY = ppu.NMI_DELAY - 1
-			if ppu.NMI_DELAY == 0 {
-				ioports.SetNMI(ppu.IO)
-				
-			}		
-		}
-					
-	ppu.CYC = ppu.CYC + 1
-	if ppu.CYC > 341 {
-		
-		ppu.CYC = 0
-		ppu.SCANLINE = ppu.SCANLINE + 1
-		
-		
-		if ppu.SCANLINE == 241 && ppu.CYC == 0 {
-			SetVBLANK(ppu)
-			ShowScreen(ppu)
-		}
-		
-		if ppu.SCANLINE == 261 {
-			ClearVBLANK(ppu)
-		}
-		
-		if ppu.SCANLINE > 261 {			
-			
-			ClearScreen(ppu)
-			
-			ppu.SCANLINE = -1
-		}
-		
-				
-	}
+	ShowScreen(ppu)
 }
 	
-	func SetVBLANK(ppu *PPU) {
-		ppu.IO.PPUSTATUS.VBLANK = true
-		ppu.IO.PPUSTATUS.NMI_OCCURRED = true
-		nmiHasBeenChanged(ppu)	
-	}
-	
-	func ClearVBLANK(ppu *PPU) {
-		ppu.IO.PPUSTATUS.VBLANK = false
-		ppu.IO.PPUSTATUS.NMI_OCCURRED = false
-		nmiHasBeenChanged(ppu)	
-	}
-	
-	func nmiHasBeenChanged(ppu *PPU) {
-		if ppu.IO.PPUSTATUS.NMI_OCCURRED == true && ppu.IO.PPUCTRL.GEN_NMI == true {
-			ppu.NMI_DELAY = 15
-
-			}
-	}
-
-
-
 func initCanvas() {
 
 	var winTitle string = "Alphanes"
@@ -228,98 +121,6 @@ func initCanvas() {
 	}
 //	defer renderer.Destroy()
 }
-
-func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
-
-
-	var result [8][8]byte
-	
-		
-
-	
-	for y := 0; y < 16; y+=2 {
-	
-			var addr uint16 = base_addr + uint16( uint16(index) * 16)
-			tile_addr := addr + uint16(y)
-			
-			
-			
-			
-			var a byte = ppu.IO.PPU_RAM[ tile_addr ]
-//			var b byte = ppu.IO.PPU_RAM[ tile_addr+1 ]
-			
-			for x := 0; x < 8; x++ {
-				xa := (a << byte(x)) >> 7
-				xb := (a << byte(x)) >> 7
-				
-			
-				
-				
-				if xa == 0 && xb == 0 { result[x][y/2] = 0 }			
-				if xa == 1 && xb == 0 { result[x][y/2] = 1 }
-				if xa == 0 && xb == 1 { result[x][y/2] = 2 }
-				if xa == 1 && xb == 1 { result[x][y/2] = 3 }			
-			}
-	}
-	
-	return result
-}
-
-func fetchNametable(ppu *PPU, x uint16, y uint16) {
-
- 
-	absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*32)  )
-	//fmt.Printf("%x\n", absolute_addr)
-	ppu.NAMETABLE = ppu.IO.PPU_RAM[ absolute_addr ]
-//	ppu.NAMETABLE = 0x6F
-	
-}
-
-func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {
-
-	tile := fetchTile(ppu, index, base_addr)
-	
-	for ky := 0; ky < 8; ky++ {
-		for kx := 0; kx < 8; kx++ {
-		
-			
-			var ox int = int(x*8) + kx
-			
-			if (flipX == true) {
-				ox = (int(x*8) + 8) - kx
-			}
-			
-			var oy int = int(y*8) + ky
-			
-			if (flipY == true) {
-				oy = (int(y*8) + 8) - ky
-			}
-
-			if ignoreZero == true {
-			if int(tile[kx][ky]) > 0 {
-					WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
-				}
-			} else {
-				WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
-			}
-			
-		
-		}
-	}
-	
-
-}
-
-func ClearScreen(ppu *PPU) {
-
-	for x:=0; x<256; x++ {
-		for y:=0; y<240; y++ {
-			WRITE_SCREEN(ppu, x,y,0)
-		}
-	}
-
-}
-
 func ShowScreen(ppu *PPU) {
 
 			renderer.SetDrawColor(0,0,0,255)
@@ -327,7 +128,7 @@ func ShowScreen(ppu *PPU) {
 
 	for x:=0; x<256; x++ {
 		for y:=0; y<240; y++ {
-			c := READ_SCREEN(ppu, x, y)
+			c := rand.Intn(4)
 			
 			if c == 0 { renderer.SetDrawColor(0, 0, 0, 255) }
 			if c == 1 { renderer.SetDrawColor(128, 128, 128, 255) }
@@ -340,98 +141,4 @@ func ShowScreen(ppu *PPU) {
 		}
 	}
 	renderer.Present()
-}
-
-func READ_SCREEN(ppu *PPU, x int, y int) int {
-	return ppu.SCREEN_DATA[x +(y*256) ]
-}
-
-func WRITE_SCREEN(ppu *PPU, x int, y int, k int) {
-	if x >= 256 || y >= 240 {
-		return
-	}
-	ppu.SCREEN_DATA[x + (y*256) ] = k
-}
-
-func printNametable(ppu *PPU) {
-
-	c := exec.Command("clear")
-	c.Stdout = os.Stdout
-	c.Run()
-
-	for x:= 0; x < 32; x++ {
-		for y:= 0; y < 32; y++ {
-			fetchNametable(ppu, uint16(x), uint16(y))
-			fmt.Printf("%2x", ppu.NAMETABLE )
-		}
-		fmt.Printf("\n")
-	}
-
-}
-
-func handleBackground(ppu *PPU, x uint16, y uint16) {
-
-	if  ppu.IO.PPUMASK.SHOW_BACKGROUND == true {
-		fetchNametable(ppu, x, y)
-		drawTile(ppu, x, y, ppu.NAMETABLE, ppu.IO.PPUCTRL.BACKGROUND_ADDR, false, false, false)
-	}
-
-}
-
-func handleSprite(ppu *PPU, x uint16, y uint16) {
-
-				for s := 0; s<256; s+=4 {
-					pos_y := uint16( ppu.IO.PPU_OAM[s] )
-					attr := ppu.IO.PPU_OAM[s+2]
-					pos_x := uint16( ppu.IO.PPU_OAM[s+3] )
-					ind := ppu.IO.PPU_OAM[s+1]
-					
-					
-					var flipX bool = false
-					var flipY bool = false
-					
-					if (attr << 7) >> 7 == 1 {
-						flipY = true
-					}
-					
-					if (attr << 6) >> 7 == 1 {
-						flipX = true
-					}
-					
-					drawTile(ppu, pos_x, pos_y, ind, ppu.IO.PPUCTRL.SPRITE_8_ADDR, flipX, flipY, true)
-					
-				} 
-}
-
-func checkSprite0Bit(ppu *PPU, x uint16, y uint16) {
-
-if(ppu.IO.PPUSTATUS.SPRITE_0_BIT == true) { return }
-
-	pos_y := uint16( ppu.IO.PPU_OAM[0])
-	pos_x := uint16( ppu.IO.PPU_OAM[3] )
-	ind := ppu.IO.PPU_OAM[1]
-	
-	matchVertical := pos_y >= y && (pos_y+8) <= y
-	matchHorizontal := pos_x >= y && (pos_x+8) <= x
-	
-	//fmt.Printf("spr_x: %d x: %d, spr_y: %d y: %d\n", pos_x, x, pos_y, y)
-	
-	if matchVertical == false || matchHorizontal == false { return }
-	fmt.Printf("match!\n")
-	
-	deltaX := pos_x - x
-	deltaY := pos_y - y
-	
-	sprite_tile := fetchTile(ppu, ind,  ppu.IO.PPUCTRL.SPRITE_8_ADDR )
-	fetchNametable(ppu, x/8, y/8)
-	bg_tile := fetchTile(ppu, ind,  ppu.IO.PPUCTRL.BACKGROUND_ADDR )
-	
-	if sprite_tile[deltaX][deltaY] != 0 && bg_tile[x%8][y%8] != 0 {
-		ppu.IO.PPUSTATUS.SPRITE_0_BIT = true
-		fmt.Printf("Sprite zero!\n")
-	}
-	
-	
-	
-
 }
