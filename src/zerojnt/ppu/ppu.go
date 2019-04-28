@@ -61,6 +61,11 @@ type PPU struct {
 var window *sdl.Window
 var renderer *sdl.Renderer
 var xx int
+var last_x uint16
+var last_y uint16
+var last_index byte
+var last_base_addr uint16
+var tile [8][8]byte
 
 func StartPPU(IO *ioports.IOPorts) PPU {
 	var ppu PPU
@@ -113,7 +118,6 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 
 
 
-	checkKeyboard()
 	checkVisibleScanline(ppu)
 	
 	if (ppu.VISIBLE_SCANLINE) {
@@ -141,8 +145,16 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 		var x uint16 = uint16(ppu.CYC%256)/8
 		var y uint16 = uint16(ppu.SCANLINE%240)/8
 		
-		handleBackground(ppu, x, y)
-		//handleSprite(ppu, x, y)
+                if (last_x != x) || (last_y != y) {
+		    handleBackground(ppu, x, y)
+                    last_x = x
+                    last_y = y
+
+
+                    if ppu.CYC == 255 && ppu.SCANLINE == 239 {
+		    handleSprite(ppu)
+                }
+                }
 		
 	}
 	
@@ -169,6 +181,8 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 		
 		if ppu.SCANLINE == 241 && ppu.CYC == 0 {
 			SetVBLANK(ppu)
+
+	checkKeyboard()
 			ShowScreen(ppu)
 		}
 		
@@ -177,9 +191,7 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 		}
 		
 		if ppu.SCANLINE > 261 {			
-			
-			ClearScreen(ppu)
-			
+                        ClearScreen(ppu)
 			ppu.SCANLINE = -1
 		}
 		
@@ -192,6 +204,18 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 		ppu.IO.PPUSTATUS.NMI_OCCURRED = true
 		nmiHasBeenChanged(ppu)	
 	}
+
+func ClearScreen(ppu *PPU) {
+
+	for x:=0; x<256; x++ {
+		for y:=0; y<240; y++ {
+			WRITE_SCREEN(ppu, x,y,0)
+		}
+	}
+
+}
+
+
 	
 	func ClearVBLANK(ppu *PPU) {
 		ppu.IO.PPUSTATUS.VBLANK = false
@@ -277,7 +301,12 @@ func fetchNametable(ppu *PPU, x uint16, y uint16) {
 
 func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {
 
-	tile := fetchTile(ppu, index, base_addr)
+
+        if last_index != index || last_base_addr != base_addr {
+	        tile = fetchTile(ppu, index, base_addr)
+        last_index = index
+        last_base_addr = base_addr
+        }
 	
 	for ky := 0; ky < 8; ky++ {
 		for kx := 0; kx < 8; kx++ {
@@ -310,15 +339,6 @@ func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX 
 
 }
 
-func ClearScreen(ppu *PPU) {
-
-	for x:=0; x<256; x++ {
-		for y:=0; y<240; y++ {
-			WRITE_SCREEN(ppu, x,y,0)
-		}
-	}
-
-}
 
 func ShowScreen(ppu *PPU) {
 
@@ -378,7 +398,7 @@ func handleBackground(ppu *PPU, x uint16, y uint16) {
 
 }
 
-func handleSprite(ppu *PPU, x uint16, y uint16) {
+func handleSprite(ppu *PPU) {
 
 				for s := 0; s<256; s+=4 {
 					pos_y := uint16( ppu.IO.PPU_OAM[s] )
