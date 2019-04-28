@@ -19,7 +19,6 @@ This file is part of Alphanes.
 package ioports
 
 import "zerojnt/cartridge"
-//import "fmt"
 
 type PPU_STATUS struct {
 	WRITTEN byte // Least significant bits previously written into a PPU register

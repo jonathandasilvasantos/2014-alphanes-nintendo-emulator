@@ -320,9 +320,6 @@ func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX 
 			
 			var oy int = int(y*8) + ky
 			
-			if (flipY == true) {
-				oy = (int(y*8) + 8) - ky
-			}
 
 			if ignoreZero == true {
 			if int(tile[kx][ky]) > 0 {

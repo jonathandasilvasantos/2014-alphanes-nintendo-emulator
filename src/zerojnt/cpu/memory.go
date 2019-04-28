@@ -43,7 +43,7 @@ func RM(cpu *CPU, cart *cartridge.Cartridge, addr uint16) byte {
 
 func WM(cpu *CPU, cart *cartridge.Cartridge, addr uint16, value byte) {
 
-	ppu_handle := addr >= 0x2000 && addr <= 0x3FFF
+	ppu_handle := (addr >= 0x2000 && addr <= 0x3FFF) || (addr == 0x4014)
 	prgrom, newaddr := mapper.MemoryMapper(cart, addr)
 	if ((newaddr >= 0x2000 && newaddr < 0x2008) || (newaddr == 0x4014) && ppu_handle) {
 		ioports.WMPPU(&cpu.IO, cart, newaddr, value)
