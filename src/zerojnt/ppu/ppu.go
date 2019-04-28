@@ -151,7 +151,7 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
                     last_y = y
 
 
-                    if ppu.CYC == 255 && ppu.SCANLINE == 239 {
+                    if ppu.SCANLINE == 239 {
 		    handleSprite(ppu)
                 }
                 }
@@ -312,13 +312,13 @@ func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX 
 		for kx := 0; kx < 8; kx++ {
 		
 			
-			var ox int = int(x*8) + kx
+			var ox int = int(x*1) + kx
 			
 			if (flipX == true) {
-				ox = (int(x*8) + 8) - kx
+				ox = (int(x*1) + 8) - kx
 			}
 			
-			var oy int = int(y*8) + ky
+			var oy int = int(y*1) + ky
 			
 
 			if ignoreZero == true {
@@ -390,7 +390,7 @@ func handleBackground(ppu *PPU, x uint16, y uint16) {
 
 	if  ppu.IO.PPUMASK.SHOW_BACKGROUND == true {
 		fetchNametable(ppu, x, y)
-		drawTile(ppu, x, y, ppu.NAMETABLE, ppu.IO.PPUCTRL.BACKGROUND_ADDR, false, false, false)
+		drawTile(ppu, x*8, y*8, ppu.NAMETABLE, ppu.IO.PPUCTRL.BACKGROUND_ADDR, false, false, false)
 	}
 
 }
@@ -415,6 +415,9 @@ func handleSprite(ppu *PPU) {
 						flipX = true
 					}
 					
+
+
+
 					drawTile(ppu, pos_x, pos_y, ind, ppu.IO.PPUCTRL.SPRITE_8_ADDR, flipX, flipY, true)
 					
 				} 
