@@ -60,7 +60,6 @@ type PPU struct {
 
 var window *sdl.Window
 var renderer *sdl.Renderer
-var xx int
 var last_x uint16
 var last_y uint16
 var last_index byte
