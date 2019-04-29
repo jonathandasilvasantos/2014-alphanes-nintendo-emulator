@@ -76,6 +76,8 @@ type IOPorts struct {
 	PPUSCROLL PPU_SCROLL
 	NMI bool
 	PREVIOUS_READ byte
+
+        CPU_CYC_INCREASE uint16
 }
 
 func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
@@ -148,6 +150,8 @@ func WMPPU(IO *IOPorts, cart *cartridge.Cartridge, addr uint16, value byte) {
 	switch(addr) {
 	
 		case 0x4014:
+                        // This transaction takes ~513 CPY Cycles
+                        IO.CPU_CYC_INCREASE = 513
 			WRITE_OAMDMA(IO, cart, value)
 		break
 	

@@ -33,6 +33,10 @@ func nmi(cpu *CPU, cart *cartridge.Cartridge) {
 
 func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 
+        // Handle IO operations that takes CPU cycles
+        cpu.CYC = cpu.CYC + cpu.IO.CPU_CYC_INCREASE
+        cpu.IO.CPU_CYC_INCREASE = 0
+
 	
 	if cpu.CYC != 0 {
 		cpu.CYC--
