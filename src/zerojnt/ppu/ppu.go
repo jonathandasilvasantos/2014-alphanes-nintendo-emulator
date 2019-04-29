@@ -307,9 +307,10 @@ func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX 
 			var oy int = int(y) + ky
 			
 
-			//if int(tile[kx][ky]) > -1 {
-			    WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
-			//}
+
+                            if oy < 240 {
+			        WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
+                            }
 			
 		
 		}
