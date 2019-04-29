@@ -189,7 +189,6 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 		}
 		
 		if ppu.SCANLINE > 261 {			
-                        ClearScreen(ppu)
 			ppu.SCANLINE = -1
 		}
 		
@@ -203,19 +202,8 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 		nmiHasBeenChanged(ppu)	
 	}
 
-func ClearScreen(ppu *PPU) {
-
-	for x:=0; x<256; x++ {
-		for y:=0; y<240; y++ {
-			WRITE_SCREEN(ppu, x,y,0)
-		}
-	}
-
-}
-
-
 	
-	func ClearVBLANK(ppu *PPU) {
+func ClearVBLANK(ppu *PPU) {
 		ppu.IO.PPUSTATUS.VBLANK = false
 		ppu.IO.PPUSTATUS.NMI_OCCURRED = false
 		nmiHasBeenChanged(ppu)	
@@ -226,7 +214,7 @@ func ClearScreen(ppu *PPU) {
 			ppu.NMI_DELAY = 15
 
 			}
-	}
+}
 
 
 
@@ -319,13 +307,9 @@ func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX 
 			var oy int = int(y) + ky
 			
 
-			if ignoreZero == true {
-			if int(tile[kx][ky]) > 0 {
-					WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
-				}
-			} else {
-				WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
-			}
+			//if int(tile[kx][ky]) > -1 {
+			    WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
+			//}
 			
 		
 		}
