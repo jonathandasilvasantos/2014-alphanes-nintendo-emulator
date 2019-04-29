@@ -60,9 +60,6 @@ type PPU struct {
 
 var window *sdl.Window
 var renderer *sdl.Renderer
-var last_index byte
-var last_base_addr uint16
-var tile [8][8]byte
 
 func StartPPU(IO *ioports.IOPorts) PPU {
 	var ppu PPU
@@ -267,11 +264,7 @@ func fetchNametable(ppu *PPU, x uint16, y uint16) {
 func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {
 
 
-        if last_index != index || last_base_addr != base_addr {
-	        tile = fetchTile(ppu, index, base_addr)
-        last_index = index
-        last_base_addr = base_addr
-        }
+	        tile := fetchTile(ppu, index, base_addr)
 	
 	for ky := 0; ky < 8; ky++ {
 		for kx := 0; kx < 8; kx++ {
