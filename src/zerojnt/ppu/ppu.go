@@ -144,14 +144,13 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 		
 		var x uint16 = uint16(ppu.CYC%256)/8
 		var y uint16 = uint16(ppu.SCANLINE%240)/8
+
 		
                 if (last_x != x) || (last_y != y) {
 		    handleBackground(ppu, x, y)
                     last_x = x
                     last_y = y
-
-
-                    if ppu.SCANLINE == 239 {
+                    if ppu.SCANLINE == 239 && ppu.CYC >= 240{
 		    handleSprite(ppu)
                 }
                 }
@@ -312,13 +311,13 @@ func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX 
 		for kx := 0; kx < 8; kx++ {
 		
 			
-			var ox int = int(x*1) + kx
+			var ox int = int(x) + kx
 			
 			if (flipX == true) {
-				ox = (int(x*1) + 8) - kx
+				ox = (int(x) + 8) - kx
 			}
 			
-			var oy int = int(y*1) + ky
+			var oy int = int(y) + ky
 			
 
 			if ignoreZero == true {
