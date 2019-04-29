@@ -260,9 +260,7 @@ func fetchNametable(ppu *PPU, x uint16, y uint16) {
 
  
 	absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*32)  )
-	//fmt.Printf("%x\n", absolute_addr)
 	ppu.NAMETABLE = ppu.IO.PPU_RAM[ absolute_addr ]
-//	ppu.NAMETABLE = 0x6F
 	
 }
 
