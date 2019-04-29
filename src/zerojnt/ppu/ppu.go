@@ -379,7 +379,15 @@ func handleSprite(ppu *PPU) {
 
 
 
-					drawTile(ppu, pos_x, pos_y, ind, ppu.IO.PPUCTRL.SPRITE_8_ADDR, flipX, flipY, true)
+					drawTile(ppu, 
+                                            pos_x,
+                                            pos_y,
+                                            ind,
+                                            ppu.IO.PPUCTRL.SPRITE_8_ADDR,
+                                            flipX,
+                                            flipY,
+                                            true)
+
 					
 				} 
 }
