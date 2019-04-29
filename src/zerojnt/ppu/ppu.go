@@ -60,8 +60,6 @@ type PPU struct {
 
 var window *sdl.Window
 var renderer *sdl.Renderer
-var last_x uint16
-var last_y uint16
 var last_index byte
 var last_base_addr uint16
 var tile [8][8]byte
@@ -135,25 +133,6 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 	}
 	
 	if ppu.CYC >= 0 && ppu.CYC < 256 && ppu.VISIBLE_SCANLINE {
-	
-	
-
-	
-	
-		
-		var x uint16 = uint16(ppu.CYC%256)/8
-		var y uint16 = uint16(ppu.SCANLINE%240)/8
-
-		
-                if (last_x != x) || (last_y != y) {
-		    handleBackground(ppu, x, y)
-                    last_x = x
-                    last_y = y
-                    if ppu.SCANLINE == 239 && ppu.CYC >= 240{
-		    handleSprite(ppu)
-                }
-                }
-		
 	}
 	
 	
@@ -181,6 +160,8 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 			SetVBLANK(ppu)
 
 	checkKeyboard()
+		        handleBackground(ppu)
+		        handleSprite(ppu)
 			ShowScreen(ppu)
 		}
 		
@@ -369,13 +350,19 @@ func printNametable(ppu *PPU) {
 
 }
 
-func handleBackground(ppu *PPU, x uint16, y uint16) {
+func handleBackground(ppu *PPU) {
+
+    for lx :=0; lx < 32; lx++ {
+        for ly :=0; ly < 30; ly++ {
+        y := uint16(ly)
+        x := uint16(lx)
 
 	if  ppu.IO.PPUMASK.SHOW_BACKGROUND == true {
 		fetchNametable(ppu, x, y)
-		drawTile(ppu, x*8, y*8, ppu.NAMETABLE, ppu.IO.PPUCTRL.BACKGROUND_ADDR, false, false, false)
-	}
-
+	drawTile(ppu, x*8, y*8, ppu.NAMETABLE, ppu.IO.PPUCTRL.BACKGROUND_ADDR, false, false, false)
+        }
+    }
+}
 }
 
 func handleSprite(ppu *PPU) {
@@ -417,7 +404,6 @@ if(ppu.IO.PPUSTATUS.SPRITE_0_BIT == true) { return }
 	matchVertical := pos_y >= y && (pos_y+8) <= y
 	matchHorizontal := pos_x >= y && (pos_x+8) <= x
 	
-	//fmt.Printf("spr_x: %d x: %d, spr_y: %d y: %d\n", pos_x, x, pos_y, y)
 	
 	if matchVertical == false || matchHorizontal == false { return }
 	fmt.Printf("match!\n")
