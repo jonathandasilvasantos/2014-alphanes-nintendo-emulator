@@ -302,6 +302,7 @@ func ShowScreen(ppu *PPU) {
 		for y:=0; y<240; y++ {
 			c := READ_SCREEN(ppu, x, y)
 			
+
 			if c == 0 { renderer.SetDrawColor(0, 0, 0, 255) }
 			if c == 1 { renderer.SetDrawColor(128, 128, 128, 255) }
 			if c == 2 { renderer.SetDrawColor(190, 190, 190, 255) }
