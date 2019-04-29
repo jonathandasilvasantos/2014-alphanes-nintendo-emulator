@@ -225,28 +225,29 @@ func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 		
 
 	
-	for y := 0; y < 16; y+=2 {
+	for y := 0; y < 8; y++ {
 	
-			var addr uint16 = base_addr + uint16( uint16(index) * 16)
+	var addr uint16 = base_addr + uint16( uint16(index) * 16)
 			tile_addr := addr + uint16(y)
+			tile_addr_b := addr + uint16(y+8)
 			
 			
 			
 			
 			var a byte = ppu.IO.PPU_RAM[ tile_addr ]
-//			var b byte = ppu.IO.PPU_RAM[ tile_addr+1 ]
+			var b byte = ppu.IO.PPU_RAM[ tile_addr_b ]
 			
 			for x := 0; x < 8; x++ {
 				xa := (a << byte(x)) >> 7
-				xb := (a << byte(x)) >> 7
+				xb := (b << byte(x)) >> 7
 				
 			
 				
 				
-				if xa == 0 && xb == 0 { result[x][y/2] = 0 }			
-				if xa == 1 && xb == 0 { result[x][y/2] = 1 }
-				if xa == 0 && xb == 1 { result[x][y/2] = 2 }
-				if xa == 1 && xb == 1 { result[x][y/2] = 3 }			
+		if xa == 0 && xb == 0 { result[x][y] = 0}
+		    if xa == 1 && xb == 0 { result[x][y] = 1 }
+		    if xa == 0 && xb == 1 { result[x][y] = 2 }
+		    if xa == 1 && xb == 1 { result[x][y] = 3 }			
 			}
 	}
 	
@@ -348,10 +349,15 @@ func handleBackground(ppu *PPU) {
         y := uint16(ly)
         x := uint16(lx)
 
-	if  ppu.IO.PPUMASK.SHOW_BACKGROUND == true {
 		fetchNametable(ppu, x, y)
-	drawTile(ppu, x*8, y*8, ppu.NAMETABLE, ppu.IO.PPUCTRL.BACKGROUND_ADDR, false, false, false)
-        }
+	drawTile(ppu,
+                    x*8,
+                    y*8,
+                    ppu.NAMETABLE,
+                    ppu.IO.PPUCTRL.BACKGROUND_ADDR,
+                    false,
+                    false,
+                    false)
     }
 }
 }
