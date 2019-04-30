@@ -217,6 +217,37 @@ func initCanvas() {
 //	defer renderer.Destroy()
 }
 
+func attrTable(ppu *PPU) [8][8]byte {
+    var result [8][8]byte
+    
+    for x := 0; x < 8; x++ {
+        for y := 0; y < 8; y++ {
+            var addr uint16 = 0x23C0
+            addr = addr + uint16(x + (y*8))
+            result[x][y] = ppu.IO.PPU_RAM[addr]
+        }
+    }
+    return result
+}
+
+func palForBackground(attr [][]byte, x uint16, y uint16) byte {
+
+    grid := attr[x/4][y/4]
+
+    bottomright := (grid >> 6)
+    bottomleft := (grid << 2) >> 6
+    topright := (grid << 4) >> 6
+    topleft := (grid << 6) >> 6
+
+    if ((x%4) < 5) && ((y%4) < 5) { return topleft }
+    if ((x%4) >= 5) && ((y%4) < 5) { return topright }
+    if ((x%4) < 5) && ((y%4) >= 5) { return bottomleft }
+
+    return bottomright
+}
+
+
+
 func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 
 
