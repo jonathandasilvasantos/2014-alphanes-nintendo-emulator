@@ -85,9 +85,14 @@ func PPU(addr uint16) uint16 {
         if (addr == 0x3F18) { return 0x3F08 }
         if (addr == 0x3F1C) { return 0x3F0C }
 
-	if (addr >= 0x3000 && addr <= 0x3EFF) {
-		return addr - 0x1000
-	}
+        // Just in case of horizontal mirroring
+        // Vertical mirror: TODO
+        if (addr >= 0x2400) && (addr < 0x2800) {
+            return addr - 0x400
+        }
+        if (addr >= 0x2C00) && (addr < 0x3000) {
+            return addr - 0x400
+        }
 	
 	if (addr >= 0x3F00 && addr <= 0x3FFF) {
 		return 0x3F00 + (addr%32)
