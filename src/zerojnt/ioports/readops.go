@@ -69,15 +69,11 @@ func READ_PPUDATA(IO *IOPorts, cart *cartridge.Cartridge) byte {
 	var request byte = IO.PPU_RAM[ newaddr ]
 	var result byte = IO.PREVIOUS_READ
 	
-	if newaddr < 0x3F00 {
-		IO.PREVIOUS_READ = request
-	} else {
-		IO.PREVIOUS_READ = IO.PPU_RAM[ newaddr - 0x1000 ]
-		result = request
-	}
+	if (newaddr >= 0x3F00) && (newaddr <= 0x3F1F) {
+            return request
+	}  
 	
-	//fmt.Printf("rnd [%x] = %x \n", newaddr, result)	
-	IO.VRAM_ADDRESS += IO.PPUCTRL.VRAM_INCREMENT
-
+	
+	IO.PREVIOUS_READ = request
 	return result
 }

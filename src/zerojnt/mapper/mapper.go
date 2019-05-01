@@ -79,6 +79,12 @@ func MemoryMapper(cart *cartridge.Cartridge, addr uint16) (bool, uint16) {
 
 func PPU(addr uint16) uint16 {
 
+    // Addresses $3F10/$3F14/$3F18/$3F1C are mirrors of $3F00/$3F04/$3F08/$3F0C. 
+        if (addr == 0x3F10) { return 0x3F00 }
+        if (addr == 0x3F14) { return 0x3F04 }
+        if (addr == 0x3F18) { return 0x3F08 }
+        if (addr == 0x3F1C) { return 0x3F0C }
+
 	if (addr >= 0x3000 && addr <= 0x3EFF) {
 		return addr - 0x1000
 	}
