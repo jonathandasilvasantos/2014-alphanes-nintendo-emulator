@@ -77,29 +77,41 @@ func MemoryMapper(cart *cartridge.Cartridge, addr uint16) (bool, uint16) {
 	return false, 0
 }
 
-func PPU(addr uint16) uint16 {
+func PPU(cart *cartridge.Cartridge, addr uint16) uint16 {
 
     // Addresses $3F10/$3F14/$3F18/$3F1C are mirrors of $3F00/$3F04/$3F08/$3F0C. 
-        if (addr == 0x3F10) { return 0x3F00 }
-        if (addr == 0x3F14) { return 0x3F04 }
-        if (addr == 0x3F18) { return 0x3F08 }
-        if (addr == 0x3F1C) { return 0x3F0C }
+        //if (addr == 0x3F10) { return 0x3F00 }
+        //if (addr == 0x3F14) { return 0x3F04 }
+        //if (addr == 0x3F18) { return 0x3F08 }
+        //if (addr == 0x3F1C) { return 0x3F0C }
 
-        // Just in case of horizontal mirroring
-        // Vertical mirror: TODO
+	//Horizontal mirroring: $2000 equals $2400 and
+	// $2800 equals $2C00 (e.g. Kid Icarus)
         if (addr >= 0x2400) && (addr < 0x2800) {
             return addr - 0x400
         }
         if (addr >= 0x2C00) && (addr < 0x3000) {
             return addr - 0x400
         }
+
+	// Vertical mirroring: $2000 equals $2800 and $2400 equals
+	// $2C00 (e.g. Super Mario Bros.)
+
+	if (cart.Header.RomType.VerticalMirroring) {
+		if (addr >= 0x2800) && (addr < 0x2C00) {
+			addr = addr - 0x800
+		}
+		if (addr >= 0x2C00) && (addr < 0x3000) {
+			addr = addr - 0x800
+		}
+	}
 	
 	if (addr >= 0x3F00 && addr <= 0x3FFF) {
 		return 0x3F00 + (addr%32)
 	}
 	
-	if (addr >= 0x4000) {
-		addr = addr % 0x4000
-	}
+	//if (addr >= 0x4000) {
+		//addr = addr % 0x4000
+	//}
 	return addr
 }

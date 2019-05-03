@@ -60,6 +60,7 @@ type PPU struct {
 
 var window *sdl.Window
 var renderer *sdl.Renderer
+var colors = rgb()
 
 func StartPPU(IO *ioports.IOPorts) PPU {
 	var ppu PPU
@@ -222,7 +223,7 @@ func attrTable(ppu *PPU) [8][8]byte {
     
     for x := 0; x < 8; x++ {
         for y := 0; y < 8; y++ {
-            var addr uint16 = 0x23C0
+	    var addr = ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + 0x3C0
             addr = addr + uint16(x + (y*8))
             result[x][y] = ppu.IO.PPU_RAM[addr]
         }
@@ -230,19 +231,18 @@ func attrTable(ppu *PPU) [8][8]byte {
     return result
 }
 
-func palForBackground(attr [][]byte, x uint16, y uint16) byte {
+func palForBackground(attr [8][8]byte, x uint16, y uint16) byte {
 
-    grid := attr[x/4][y/4]
+    grid := attr[x/8][y/8]
 
     bottomright := (grid >> 6)
     bottomleft := (grid << 2) >> 6
     topright := (grid << 4) >> 6
     topleft := (grid << 6) >> 6
 
-    if ((x%4) < 5) && ((y%4) < 5) { return topleft }
-    if ((x%4) >= 5) && ((y%4) < 5) { return topright }
-    if ((x%4) < 5) && ((y%4) >= 5) { return bottomleft }
-
+    if (x%8 >= 4) && (y%8 < 4) { return topright }
+    if (x%8 < 4) && (y%8 >= 4) { return bottomleft }
+    if (x%8 < 4) && (y%8 < 4) { return topleft }
     return bottomright
 }
 
@@ -259,8 +259,8 @@ func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 	for y := 0; y < 8; y++ {
 	
 	var addr uint16 = base_addr + uint16( uint16(index) * 16)
-			tile_addr := addr + uint16(y)
-			tile_addr_b := addr + uint16(y+8)
+	tile_addr := addr + uint16(y)
+	tile_addr_b :=  tile_addr+8
 			
 			
 			
@@ -269,8 +269,8 @@ func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 			var b byte = ppu.IO.PPU_RAM[ tile_addr_b ]
 			
 			for x := 0; x < 8; x++ {
-				xa := (a << byte(x)) >> 7
-				xb := (b << byte(x)) >> 7
+				xa := ReadBit(a, byte(x))
+				xb := ReadBit(b, byte(x))
 				
 			
 				
@@ -279,7 +279,7 @@ func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 		    if xa == 1 && xb == 0 { result[x][y] = 1 }
 		    if xa == 0 && xb == 1 { result[x][y] = 2 }
 		    if xa == 1 && xb == 1 { result[x][y] = 3 }			
-			}
+		    }
 	}
 	
 	return result
@@ -292,6 +292,61 @@ func fetchNametable(ppu *PPU, x uint16, y uint16) {
 	ppu.NAMETABLE = ppu.IO.PPU_RAM[ absolute_addr ]
 	
 }
+
+
+
+func drawBGTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {
+
+
+	tile := fetchTile(ppu, index, base_addr)
+
+        // Getting palette values
+        wx := uint16(x/16)
+        wy := uint16(y/16)
+        attrpal := attrTable(ppu)
+        pal := palForBackground(attrpal, wx, wy)
+
+        //var ca uint16 = 0
+        //var cb uint16 = 1
+        //var cc uint16 = 2
+        //var cd uint16 = 3
+
+        
+
+
+
+	
+	for ky := 0; ky < 8; ky++ {
+		for kx := 0; kx < 8; kx++ {
+		
+			
+			var ox int = int(x) + kx
+			
+			if (flipX == true) {
+				ox = (int(x) + 8) - kx
+			}
+			
+			var oy int = int(y) + ky
+			
+
+
+                            if oy < 240 {
+                                
+                    color := uint16(tile[kx][ky] + pal + 1)
+                    color = uint16(ppu.IO.PPU_RAM[0x3F00+color])
+                    if tile[kx][ky] == 0 { color = 0}
+                    
+
+			        WRITE_SCREEN(ppu, ox, oy, int(color) )
+                            }
+			
+		
+		}
+	}
+	
+
+}
+
 
 func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {
 
@@ -334,10 +389,11 @@ func ShowScreen(ppu *PPU) {
 			c := READ_SCREEN(ppu, x, y)
 			
 
-			if c == 0 { renderer.SetDrawColor(0, 0, 0, 255) }
-			if c == 1 { renderer.SetDrawColor(128, 128, 128, 255) }
-			if c == 2 { renderer.SetDrawColor(190, 190, 190, 255) }
-			if c == 3 { renderer.SetDrawColor(255, 255, 255, 255) }
+	    renderer.SetDrawColor(colors[c][0], colors[c][1], colors[c][2], 255)
+		    if c == 0 { renderer.SetDrawColor(0, 0, 0, 255) }
+		    if c == 1 { renderer.SetDrawColor(255, 0, 0, 255) }
+		    if c == 2 { renderer.SetDrawColor(0, 255, 0, 255) }
+		    if c == 3 { renderer.SetDrawColor(0, 0, 255, 255) }
 			var ox int32 = int32(x)
 			var oy int32 = int32(y)
 			renderer.DrawPoint(ox, oy)
@@ -376,13 +432,17 @@ func printNametable(ppu *PPU) {
 
 func handleBackground(ppu *PPU) {
 
+    if ppu.IO.PPUMASK.SHOW_BACKGROUND == false {
+        return
+    }
+
     for lx :=0; lx < 32; lx++ {
         for ly :=0; ly < 30; ly++ {
         y := uint16(ly)
         x := uint16(lx)
 
 		fetchNametable(ppu, x, y)
-	drawTile(ppu,
+	drawBGTile(ppu,
                     x*8,
                     y*8,
                     ppu.NAMETABLE,
@@ -395,6 +455,10 @@ func handleBackground(ppu *PPU) {
 }
 
 func handleSprite(ppu *PPU) {
+
+    if ppu.IO.PPUMASK.SHOW_SPRITE == false {
+        return
+    }
 
 				for s := 0; s<256; s+=4 {
 					pos_y := uint16( ppu.IO.PPU_OAM[s] )

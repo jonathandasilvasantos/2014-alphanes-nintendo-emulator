@@ -20,6 +20,7 @@ package ioports
 
 import "zerojnt/cartridge"
 import "zerojnt/mapper"
+//import "fmt"
 
 
 func WRITE_PPUCTRL(IO *IOPorts, value byte) {
@@ -126,7 +127,7 @@ func WRITE_PPUMASK(IO *IOPorts, value byte) {
 }
 
 func WRITE_OAMADDR(IO *IOPorts, value byte) {
-	IO.PPU_OAM_ADDRESS = value
+	//IO.PPU_OAM_ADDRESS = value
 }
 
 func WRITE_OAMDATA(IO *IOPorts, value byte) {
@@ -162,25 +163,24 @@ func WRITE_PPUADDR(IO *IOPorts, value byte) {
 
 func WRITE_PPUDATA(IO *IOPorts, cart *cartridge.Cartridge, value byte) {
 	
-	
-	IO.PPU_RAM[ mapper.PPU(IO.VRAM_ADDRESS) ] = value
+	//if (IO.VRAM_ADDRESS >= 0x23C0) && (IO.VRAM_ADDRESS <=  0x23C0+0xFF) {
+		//fmt.Printf("%X : %X\n", IO.VRAM_ADDRESS, value)	
+	//}
+	IO.PPU_RAM[ mapper.PPU(cart, IO.VRAM_ADDRESS) ] = value
 	IO.VRAM_ADDRESS += IO.PPUCTRL.VRAM_INCREMENT
 }
 
 func WRITE_OAMDMA(IO *IOPorts, cart *cartridge.Cartridge, value byte) {
 	
-	var cpuaddr uint16 = uint16(value) << 8
 	for i:=0; i<256; i++ {
+		cpuaddr := uint16( uint16(value) << 8)
 		prgrom, finaladdr := mapper.MemoryMapper(cart, cpuaddr)
 		var data byte
 		if prgrom == true {
-			data = cart.PRG[finaladdr]
+			data = cart.PRG[ finaladdr + uint16(i)]
 		} else {
-			data = IO.CPU_RAM[finaladdr]
+			data = IO.CPU_RAM[ finaladdr + uint16(i)]
 		}
-		
-		IO.PPU_OAM[IO.PPU_OAM_ADDRESS] = data
-		IO.PPU_OAM_ADDRESS++
-		cpuaddr++
+		IO.PPU_OAM[i] = data
 	}
 }

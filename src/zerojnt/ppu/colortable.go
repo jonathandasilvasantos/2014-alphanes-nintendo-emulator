@@ -19,7 +19,7 @@ This file is part of Alphanes.
 package ppu
 
 
-func rgbtable() [][]byte {
+func rgb() [][]byte {
 
 	color := [][]byte{{124,124,124},
 			{0,0,252},

@@ -84,7 +84,8 @@ func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
 	var io IOPorts
 	io.CPU_RAM = make([]byte, 0xFFFF)
 	
-	io.PPU_RAM = make([]byte, 0x4000)
+	// TODO: make dynamic memory reserve
+	io.PPU_RAM = make([]byte, 0xFFFF)
 	
 	// Initial value of PAL
 	for q := 0; q < 32; q++ {

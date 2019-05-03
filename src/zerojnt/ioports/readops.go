@@ -63,7 +63,7 @@ func READ_PPUDATA(IO *IOPorts, cart *cartridge.Cartridge) byte {
 
 	
 
-	var newaddr uint16 = mapper.PPU (IO.VRAM_ADDRESS)
+	var newaddr uint16 = mapper.PPU (cart, IO.VRAM_ADDRESS)
 
 
 	var request byte = IO.PPU_RAM[ newaddr ]
