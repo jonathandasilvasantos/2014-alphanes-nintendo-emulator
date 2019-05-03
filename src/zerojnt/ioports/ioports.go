@@ -77,20 +77,21 @@ type IOPorts struct {
 	NMI bool
 	PREVIOUS_READ byte
 
+        CART *cartridge.Cartridge
+
         CPU_CYC_INCREASE uint16
 }
 
 func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
 	var io IOPorts
 	io.CPU_RAM = make([]byte, 0xFFFF)
+
+        io.CART = cart
+
 	
 	// TODO: make dynamic memory reserve
 	io.PPU_RAM = make([]byte, 0xFFFF)
 	
-	// Initial value of PAL
-	for q := 0; q < 32; q++ {
-		io.PPU_RAM[0x3F00+q] = 0x3F
-	}
 	
 	io.NMI = false
 	
@@ -98,19 +99,6 @@ func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
 	io.PPUSTATUS.SPRITE_0_BIT = false
 	io.PPUSTATUS.SPRITE_OVERFLOW = false
 	io.PREVIOUS_READ = 0
-	
-
-	
-	
-	
-	var page8bits = 8192
-	var size int = int(cart.Header.VROM_SIZE)*page8bits
-
-	for i := 0; i < size; i++ {
-		io.PPU_RAM[i] = cart.CHR[i]
-	}
-
-	
 	io.PPU_OAM = make([]byte, 256)
 	return io
 }

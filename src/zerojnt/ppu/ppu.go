@@ -20,7 +20,6 @@ package ppu
 
 import "fmt"
 import "zerojnt/cartridge"
-//import "zerojnt/mapper"
 import "zerojnt/ioports"
 import "os"
 import "os/exec"
@@ -225,7 +224,7 @@ func attrTable(ppu *PPU) [8][8]byte {
         for y := 0; y < 8; y++ {
 	    var addr = ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + 0x3C0
             addr = addr + uint16(x + (y*8))
-            result[x][y] = ppu.IO.PPU_RAM[addr]
+        result[x][y] = ReadPPURam(ppu, addr)
         }
     }
     return result
@@ -259,26 +258,20 @@ func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 	for y := 0; y < 8; y++ {
 	
 	var addr uint16 = base_addr + uint16( uint16(index) * 16)
+
 	tile_addr := addr + uint16(y)
 	tile_addr_b :=  tile_addr+8
 			
 			
 			
 			
-			var a byte = ppu.IO.PPU_RAM[ tile_addr ]
-			var b byte = ppu.IO.PPU_RAM[ tile_addr_b ]
+			var a byte = ReadPPURam(ppu,  tile_addr)
+			var b byte = ReadPPURam(ppu, tile_addr_b )
 			
 			for x := 0; x < 8; x++ {
 				xa := ReadBit(a, byte(x))
 				xb := ReadBit(b, byte(x))
-				
-			
-				
-				
-		if xa == 0 && xb == 0 { result[x][y] = 0}
-		    if xa == 1 && xb == 0 { result[x][y] = 1 }
-		    if xa == 0 && xb == 1 { result[x][y] = 2 }
-		    if xa == 1 && xb == 1 { result[x][y] = 3 }			
+                                result[x][y] = xa+xb
 		    }
 	}
 	
@@ -289,7 +282,7 @@ func fetchNametable(ppu *PPU, x uint16, y uint16) {
 
  
 	absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*32)  )
-	ppu.NAMETABLE = ppu.IO.PPU_RAM[ absolute_addr ]
+	ppu.NAMETABLE = ReadPPURam(ppu, absolute_addr)
 	
 }
 
@@ -332,9 +325,10 @@ func drawBGTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flip
 
                             if oy < 240 {
                                 
-                    color := uint16(tile[kx][ky] + pal + 1)
-                    color = uint16(ppu.IO.PPU_RAM[0x3F00+color])
-                    if tile[kx][ky] == 0 { color = 0}
+                color := uint16(tile[kx][ky] + (pal*4) + 1)
+                var coloraddr = uint16(0x3F00+color)
+                color = uint16(ReadPPURam(ppu, coloraddr))
+                    if tile[kx][ky] == 0 { color = uint16(ppu.IO.PPU_RAM[0x3F00]) }
                     
 
 			        WRITE_SCREEN(ppu, ox, oy, int(color) )
