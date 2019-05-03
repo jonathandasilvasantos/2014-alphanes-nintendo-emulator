@@ -82,4 +82,5 @@ doc/codelab/wiki/*.bin
 /src/github.com/
 /roms/
 /testroms/
+/refs/
 alphanes
