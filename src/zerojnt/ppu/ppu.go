@@ -341,7 +341,7 @@ func drawBGTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flip
 }
 
 
-func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {
+func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, attr byte) {
 
 
 	        tile := fetchTile(ppu, index, base_addr)
@@ -361,7 +361,13 @@ func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX 
 
 
                             if oy < 240 {
-			        WRITE_SCREEN(ppu, ox, oy, int(tile[kx][ky]) )
+                            pal := uint16(((attr << 6) >> 6))
+                            coloraddr := uint16( 0x3F10 + (pal*4 + 1) )
+                color := ReadPPURam(ppu, coloraddr + uint16(tile[kx][ky]) )
+                if tile[kx][ky] == 0 { color = 0 }
+
+
+			        WRITE_SCREEN(ppu, ox, oy, int(color) )
                             }
 			
 		
@@ -384,9 +390,7 @@ func ShowScreen(ppu *PPU) {
 
 	    renderer.SetDrawColor(colors[c][0], colors[c][1], colors[c][2], 255)
 		    if c == 0 { renderer.SetDrawColor(0, 0, 0, 255) }
-		    if c == 1 { renderer.SetDrawColor(255, 0, 0, 255) }
-		    if c == 2 { renderer.SetDrawColor(0, 255, 0, 255) }
-		    if c == 3 { renderer.SetDrawColor(0, 0, 255, 255) }
+
 			var ox int32 = int32(x)
 			var oy int32 = int32(y)
 			renderer.DrawPoint(ox, oy)
@@ -478,7 +482,7 @@ func handleSprite(ppu *PPU) {
                                             ppu.IO.PPUCTRL.SPRITE_8_ADDR,
                                             flipX,
                                             flipY,
-                                            true)
+                                            attr)
 
 					
 				} 
