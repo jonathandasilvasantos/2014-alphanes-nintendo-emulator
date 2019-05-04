@@ -43,7 +43,6 @@ type PPU struct {
 	
 	
 	
-	NAMETABLE byte
 	ATTR byte
 	HIGH_TILE byte
 	LOW_TILE byte
@@ -278,11 +277,11 @@ func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 	return result
 }
 
-func fetchNametable(ppu *PPU, x uint16, y uint16) {
+func fetchNametable(ppu *PPU, x uint16, y uint16) byte {
 
  
 	absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*32)  )
-	ppu.NAMETABLE = ReadPPURam(ppu, absolute_addr)
+	return  ReadPPURam(ppu, absolute_addr)
 	
 }
 
@@ -416,10 +415,7 @@ func printNametable(ppu *PPU) {
 
 	for x:= 0; x < 32; x++ {
 		for y:= 0; y < 32; y++ {
-			fetchNametable(ppu, uint16(x), uint16(y))
-			fmt.Printf("%2x", ppu.NAMETABLE )
 		}
-		fmt.Printf("\n")
 	}
 
 }
@@ -435,11 +431,11 @@ func handleBackground(ppu *PPU) {
         y := uint16(ly)
         x := uint16(lx)
 
-		fetchNametable(ppu, x, y)
+		tileid := fetchNametable(ppu, x, y)
 	drawBGTile(ppu,
                     x*8,
                     y*8,
-                    ppu.NAMETABLE,
+                    tileid,
                     ppu.IO.PPUCTRL.BACKGROUND_ADDR,
                     false,
                     false,
