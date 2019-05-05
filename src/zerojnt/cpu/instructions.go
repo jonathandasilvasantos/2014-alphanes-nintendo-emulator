@@ -28,7 +28,7 @@ func ADC (cpu *CPU, value uint16) {
 	}
 	
 	CarryFlag(cpu, tmp)
-	NegativeFlag(cpu, tmp)
+        SetN(cpu, ((cpu.A >> 7) & 1))
 
 	var M byte = byte(cpu.A)
 	var N byte = byte(value)
@@ -49,7 +49,7 @@ func ADC (cpu *CPU, value uint16) {
 func AND (cpu *CPU, value uint16) {
 	cpu.A = cpu.A & byte(value)
 	ZeroFlag(cpu, uint16 (cpu.A))
-	NegativeFlag(cpu, uint16(cpu.A))
+	SetN(cpu, ((cpu.A >> 7) & 1))
 }
 
 // This operation shifts all the bits of the accumulator or memory contents one bit left. Bit 0 is set to 0 and bit 7 is placed in the carry flag. The effect of this operation is to multiply the memory contents by 2 (ignoring 2's complement considerations), setting the carry if the result will not fit in 8 bits.
@@ -369,7 +369,7 @@ func DEX(cpu *CPU) {
 func DEY(cpu *CPU) {
 	cpu.Y--
 	ZeroFlag(cpu, uint16(cpu.Y))
-	NegativeFlag(cpu, uint16(cpu.Y))
+        SetN(cpu, ((cpu.Y >> 7) & 1))
 }
 
 // An exclusive OR is performed, bit by bit, on the accumulator contents using the contents of a byte of memory.
@@ -422,21 +422,21 @@ func JSR(cpu *CPU, value uint16) {
 func LDA(cpu *CPU, value uint16) {
 	cpu.A = byte(value)
 	ZeroFlag(cpu, value)
-	NegativeFlag(cpu, value)
+	SetN(cpu, ((cpu.A >> 7) & 1) )
 }
 
 // Loads a byte of memory into the X register setting the zero and negative flags as appropriate.
 func LDX(cpu *CPU, value uint16) {
 	cpu.X = byte(value)
 	ZeroFlag(cpu, value)
-	NegativeFlag(cpu, value)
+        SetN(cpu, ((cpu.X >> 7) & 1))
 }
 
 // Loads a byte of memory into the Y register setting the zero and negative flags as appropriate.
 func LDY (cpu *CPU, value uint16) {
 	cpu.Y = byte(value)
 	ZeroFlag(cpu, value)
-	NegativeFlag(cpu, value)
+        SetN(cpu, ((cpu.Y >> 7) & 1))
 }
 
 // Each of the bits in A or M is shift one place to the right. The bit that was in bit 0 is shifted into the carry flag. Bit 7 is set to zero.
@@ -467,14 +467,14 @@ func NOP() {
 func ORA (cpu *CPU, value uint16) {
 	cpu.A = cpu.A | byte(value)
 	ZeroFlag(cpu, uint16(cpu.A))
-	NegativeFlag(cpu, uint16(cpu.A))
+        SetN(cpu, ((cpu.A >> 7) & 1))
 }
 
 // Pulls an 8 bit value from the stack and into the accumulator. The zero and negative flags are set as appropriate.
 func PLA (cpu *CPU) {
 	cpu.A = PopMemory(cpu)
 	ZeroFlag(cpu, uint16(cpu.A))
-	NegativeFlag(cpu, uint16(cpu.A))
+        SetN(cpu, ((cpu.A >> 7) & 1))
 	
 }
 
