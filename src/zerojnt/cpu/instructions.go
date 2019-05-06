@@ -59,7 +59,7 @@ func ASL (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 		SetC(cpu, Bit7(cpu.A))
 		cpu.A = cpu.A << 1
 		ZeroFlag(cpu, uint16(cpu.A))
-		NegativeFlag(cpu, uint16(cpu.A))
+	        SetN(cpu, ((cpu.A >> 7) & 1))
 		return
 	}
 
@@ -67,7 +67,7 @@ func ASL (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 	SetC(cpu, Bit7(byte(tmp)))
 	tmp = tmp << 1
 	ZeroFlag(cpu, tmp)
-	NegativeFlag(cpu, tmp)
+	SetN(cpu, ((byte(tmp) >> 7) & 1))
 	WM(cpu, cart, value, byte(tmp))
 }
 
@@ -283,7 +283,7 @@ func BVS(cpu *CPU, value uint16) {
 func CMP(cpu *CPU, value uint16) {
 	var tmp uint16 = uint16(cpu.A) - value
 
-	NegativeFlag(cpu, tmp)
+	SetN(cpu, ((byte(tmp) >> 7) & 1))
 	SetC(cpu, 0)
 	SetZ(cpu, 0)
 	if uint16(cpu.A) >= value {
@@ -329,7 +329,7 @@ func CPX (cpu *CPU, value uint16) {
 	} else {
 		SetZ(cpu, 0)
 	}
-	NegativeFlag(cpu, uint16(tmp))
+	SetN(cpu, ((byte(tmp) >> 7) & 1))
 }
 
 // This instruction compares the contents of the Y register with another memory held value and sets the zero and carry flags as appropriate.
@@ -345,7 +345,7 @@ func CPY (cpu *CPU, value uint16) {
 	} else {
 		SetZ(cpu, 0)
 	}
-	NegativeFlag(cpu, uint16(tmp))
+	SetN(cpu, ((byte(tmp) >> 7) & 1))
 }
 
 // Subtracts one from the value held at a specified memory location setting the zero and negative flags as appropriate.
@@ -355,14 +355,14 @@ func DEC (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 	WM(cpu, cart, value, tmp)
 	
 	ZeroFlag(cpu, uint16(tmp))
-	NegativeFlag(cpu, uint16(tmp))
+	SetN(cpu, ((byte(tmp) >> 7) & 1))
 }
 
 // Subtracts one from the X register setting the zero and negative flags as appropriate.
 func DEX(cpu *CPU) {
 	cpu.X--
 	ZeroFlag(cpu, uint16(cpu.X))
-	NegativeFlag(cpu, uint16(cpu.X))
+        SetN(cpu, ((cpu.X >> 7) & 1))
 }
 
 // Subtracts one from the Y register setting the zero and negative flags as appropriate.
@@ -376,7 +376,7 @@ func DEY(cpu *CPU) {
 func EOR (cpu *CPU, value uint16) {
 	cpu.A = cpu.A ^ byte(value)
 	ZeroFlag(cpu, uint16(cpu.A))
-	NegativeFlag(cpu, uint16(cpu.A))	
+        SetN(cpu, ((cpu.A >> 7) & 1))
 }
 
 // Adds one to the value held at a specified memory location setting the zero and negative flags as appropriate.
@@ -387,14 +387,14 @@ func INC (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 	WM(cpu, cart, value, tmp)
 	
 	ZeroFlag(cpu, uint16(tmp))
-	NegativeFlag(cpu, uint16(tmp))
+	SetN(cpu, ((byte(tmp) >> 7) & 1))
 }
 
 // Adds one to the X register setting the zero and negative flags as appropriate.
 func INX (cpu *CPU) {
 	cpu.X++
 	ZeroFlag(cpu, uint16(cpu.X))
-	NegativeFlag(cpu, uint16(cpu.X))
+	SetN(cpu, ((byte(cpu.X) >> 7) & 1))
 }
 
 
@@ -402,7 +402,7 @@ func INX (cpu *CPU) {
 func INY (cpu *CPU) {
 	cpu.Y++
 	ZeroFlag(cpu, uint16(cpu.Y))
-	NegativeFlag(cpu, uint16(cpu.Y))
+	SetN(cpu, ((byte(cpu.Y) >> 7) & 1))
 }
 
 
@@ -446,7 +446,7 @@ func LSR (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 		SetC(cpu, Bit0(cpu.A))
 		cpu.A = cpu.A >> 1
 		ZeroFlag(cpu, uint16(cpu.A))
-		NegativeFlag(cpu, uint16(cpu.A))
+	        SetN(cpu, ((byte(cpu.A) >> 7) & 1))
 		return
 	}
 	
@@ -454,7 +454,7 @@ func LSR (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 	SetC(cpu, Bit0(tmp))
 	tmp = tmp >> 1
 	ZeroFlag(cpu, uint16(tmp))
-	NegativeFlag(cpu, uint16(tmp))
+	SetN(cpu, ((byte(tmp) >> 7) & 1))
 	WM(cpu, cart, value, tmp)
 }
 
@@ -515,7 +515,7 @@ func ROL (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 		SetC(cpu, oldbit)
 		
 		ZeroFlag(cpu, uint16(cpu.A))
-		NegativeFlag(cpu, uint16(cpu.A))
+                SetN(cpu, ((cpu.A >> 7) & 1))
 		return
 	}
 	
@@ -527,7 +527,7 @@ func ROL (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 	SetC(cpu, oldbit)
 	
 	ZeroFlag(cpu, uint16(tmp))
-	NegativeFlag(cpu, uint16(tmp))
+        SetN(cpu, ((byte(tmp) >> 7) & 1))
 	WM(cpu, cart, value, tmp)
 }
 
@@ -542,7 +542,7 @@ func ROR (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 		SetC(cpu, oldbit)
 		
 		ZeroFlag(cpu, uint16(cpu.A))
-		NegativeFlag(cpu, uint16(cpu.A))
+                SetN(cpu, ((cpu.A >> 7) & 1))
 		return
 	}
 	
@@ -554,7 +554,7 @@ func ROR (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 	SetC(cpu, oldbit)
 	
 	ZeroFlag(cpu, uint16(tmp))
-	NegativeFlag(cpu, uint16(tmp))
+        SetN(cpu, ((byte(tmp) >> 7) & 1))
 	WM(cpu, cart, value, tmp)
 }
 
@@ -592,7 +592,7 @@ func SBC (cpu *CPU, value uint16) {
 	}
 	
 	CarryFlag(cpu, tmp)
-	NegativeFlag(cpu, tmp)
+        SetN(cpu, ((byte(tmp) >> 7) & 1))
 
 	var M byte = byte(cpu.A)
 	var N byte = byte(255-value)
@@ -645,28 +645,28 @@ func STY (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 func TAX (cpu *CPU) {
 	cpu.X = cpu.A
 	ZeroFlag(cpu, uint16(cpu.X))
-	NegativeFlag(cpu, uint16(cpu.X))
+        SetN(cpu, ((cpu.X >> 7) & 1))
 }
 
 // Copies the current contents of the accumulator into the Y register and sets the zero and negative flags as appropriate.
 func TAY (cpu *CPU) {
 	cpu.Y = cpu.A
 	ZeroFlag(cpu, uint16(cpu.Y))
-	NegativeFlag(cpu, uint16(cpu.Y))
+        SetN(cpu, ((cpu.Y >> 7) & 1))
 }
 
 // Copies the current contents of the stack register into the X register and sets the zero and negative flags as appropriate.
 func TSX (cpu *CPU) {
 	cpu.X = cpu.SP
 	ZeroFlag(cpu, uint16(cpu.X))
-	NegativeFlag(cpu, uint16(cpu.X))
+        SetN(cpu, ((cpu.X >> 7) & 1))
 }
 
 // Copies the current contents of the X register into the accumulator and sets the zero and negative flags as appropriate.
 func TXA (cpu *CPU) {
 	cpu.A = cpu.X
 	ZeroFlag(cpu, uint16(cpu.A))
-	NegativeFlag(cpu, uint16(cpu.A))
+        SetN(cpu, ((cpu.A >> 7) & 1))
 }
 
 // Copies the current contents of the X register into the stack register.
@@ -678,5 +678,5 @@ func TXS (cpu *CPU) {
 func TYA (cpu *CPU) {
 	cpu.A = cpu.Y
 	ZeroFlag(cpu, uint16(cpu.A))
-	NegativeFlag(cpu, uint16(cpu.A))
+        SetN(cpu, ((cpu.A >> 7) & 1))
 }
