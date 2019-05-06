@@ -23,11 +23,18 @@ import "zerojnt/cartridge"
 //This instruction adds the contents of a memory location to the accumulator together with the carry bit. If overflow occurs the carry bit is set, this enables multiple byte addition to be performed.
 func ADC (cpu *CPU, value uint16) {
 	var tmp uint16 = uint16(cpu.A) + value
+        carry := uint16( uint16(cpu.A) + uint16(value) )
 	if(cpu.Flags.C == 1) {
 		tmp++
+                carry++
 	}
+
+        if carry > 0xFF {
+            SetC(cpu, 1)
+        } else {
+            SetC(cpu, 0)
+        }
 	
-	CarryFlag(cpu, tmp)
         SetN(cpu, ((cpu.A >> 7) & 1))
 
 	var M byte = byte(cpu.A)
