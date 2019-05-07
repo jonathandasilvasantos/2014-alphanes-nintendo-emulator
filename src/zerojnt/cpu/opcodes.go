@@ -28,6 +28,7 @@ func nmi(cpu *CPU, cart *cartridge.Cartridge) {
 	PHP(cpu)	
 	cpu.PC = LE(RM(cpu, cart, 0xFFFA), RM(cpu, cart, 0xFFFB))
 	SetI(cpu, 1)
+	cpu.IO.PPUSTATUS.WRITTEN =0
 	cpu.CYC = 7
 }
 

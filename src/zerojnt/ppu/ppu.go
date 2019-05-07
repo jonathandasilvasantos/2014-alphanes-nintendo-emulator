@@ -39,7 +39,6 @@ type PPU struct {
 	SCANLINE int
 	
 	
-	NMI_DELAY uint
 	
 	
 	
@@ -136,13 +135,9 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 
 
 	
-		if ppu.NMI_DELAY > 0 && ppu.IO.PPUSTATUS.NMI_OCCURRED == true && ppu.IO.PPUCTRL.GEN_NMI == true {
-		
-			ppu.NMI_DELAY = ppu.NMI_DELAY - 1
-			if ppu.NMI_DELAY == 0 {
-				ioports.SetNMI(ppu.IO)
-				
-			}		
+		if ppu.IO.PPUSTATUS.NMI_OCCURRED == true && ppu.IO.PPUCTRL.GEN_NMI == true {
+		    ioports.SetNMI(ppu.IO)
+                    ppu.IO.PPUSTATUS.NMI_OCCURRED = false
 		}
 					
 	ppu.CYC = ppu.CYC + 1
@@ -176,22 +171,14 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
 	func SetVBLANK(ppu *PPU) {
 		ppu.IO.PPUSTATUS.VBLANK = true
 		ppu.IO.PPUSTATUS.NMI_OCCURRED = true
-		nmiHasBeenChanged(ppu)	
 	}
 
 	
 func ClearVBLANK(ppu *PPU) {
 		ppu.IO.PPUSTATUS.VBLANK = false
 		ppu.IO.PPUSTATUS.NMI_OCCURRED = false
-		nmiHasBeenChanged(ppu)	
 	}
 	
-	func nmiHasBeenChanged(ppu *PPU) {
-		if ppu.IO.PPUSTATUS.NMI_OCCURRED == true && ppu.IO.PPUCTRL.GEN_NMI == true {
-			ppu.NMI_DELAY = 15
-
-			}
-}
 
 
 
