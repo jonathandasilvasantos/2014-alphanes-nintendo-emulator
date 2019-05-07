@@ -10,6 +10,8 @@ src/pkg/launchpad.net
 *.ao
 *.so
 *.pyc
+*.debug
+*.log
 ._*
 .nfs.*
 [568a].out
