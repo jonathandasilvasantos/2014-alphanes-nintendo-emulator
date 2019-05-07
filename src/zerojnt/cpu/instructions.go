@@ -19,6 +19,7 @@ This file is part of Alphanes.
 package cpu
 
 import "zerojnt/cartridge"
+//import "fmt"
 
 //This instruction adds the contents of a memory location to the accumulator together with the carry bit. If overflow occurs the carry bit is set, this enables multiple byte addition to be performed.
 func ADC (cpu *CPU, value uint16) {
@@ -88,69 +89,48 @@ func ASL (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 func BCC(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
-	if cpu.Flags.C == 0 {
-		var result uint16 = 0
-		cpu.CYCSpecial++ // CYC (+1 if branch succeeds)
-
-		result = cpu.PC + 2 + value
-		if value > 127 {
-			result = (cpu.PC + 2) - (0x100 - uint16(value))
-		}
-
-				
-		if H(cpu.PC+1) != H(result) {
-			cpu.CYCSpecial += 2 // 	(+2 if to a new page)
-		}
-		cpu.PC = result
-	} else {
-		cpu.PC += 2
+        var oldpc uint16
+	if (cpu.Flags.C) == 0 {
+		oldpc = cpu.PC
+		cpu.PC += value
+		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
+			cpu.CYCSpecial+=2
+                } else { cpu.CYCSpecial++ }
 	}
+        
+           cpu.PC+=2 
 }
 
 // If the carry flag is set then add the relative displacement to the program counter to cause a branch to a new location.
 func BCS(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
-	if cpu.Flags.C == 1 {
-		var result uint16 = 0
-		cpu.CYCSpecial++ // CYC (+1 if branch succeeds)
-
-		result = cpu.PC + 2 + value
-		if value > 127 {
-			result = (cpu.PC + 2) - (0x100 - uint16(value))
-		}
-		
-		
-		if H(cpu.PC+1) != H(result) {
-			cpu.CYCSpecial += 2 // 	(+2 if to a new page)
-		}
-		cpu.PC = result
-	} else {
-		cpu.PC += 2
+        var oldpc uint16
+	if (cpu.Flags.C) == 1 {
+		oldpc = cpu.PC
+		cpu.PC += value
+		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
+			cpu.CYCSpecial+=2
+                } else { cpu.CYCSpecial++ }
 	}
+        
+           cpu.PC+=2 
 }
 
 // If the zero flag is set then add the relative displacement to the program counter to cause a branch to a new location.
 func BEQ(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
-	if cpu.Flags.Z == 1 {
-		var result uint16 = 0
-		cpu.CYCSpecial++ // CYC (+1 if branch succeeds)
-
-		result = cpu.PC + 2 + value
-		if value > 127 {
-			result = (cpu.PC + 2) - (0x100 - uint16(value))
-		}
-		
-		
-		if H(cpu.PC+1) != H(result) {
-			cpu.CYCSpecial += 2 // 	(+2 if to a new page)
-		}
-		cpu.PC = result
-	} else {
-		cpu.PC += 2
+        var oldpc uint16
+	if (cpu.Flags.Z) == 1 {
+		oldpc = cpu.PC
+		cpu.PC += value
+		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
+			cpu.CYCSpecial+=2
+                } else { cpu.CYCSpecial++ }
 	}
+        
+           cpu.PC+=2 
 }
 
 // This instructions is used to test if one or more bits are set in a target memory location. The mask pattern in A is ANDed with the value in memory to set or clear the zero flag, but the result is not kept. Bits 7 and 6 of the value from memory are copied into the N and V flags.
@@ -166,73 +146,48 @@ func BIT(cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 func BMI(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
-	if cpu.Flags.N == 1 {
-		var result uint16 = 0
-		cpu.CYCSpecial++ // CYC (+1 if branch succeeds)
-
-		result = cpu.PC + 2 + value
-		if value > 127 {
-			result = (cpu.PC + 2) - (0x100 - uint16(value))
-		}
-		
-		
-		if H(cpu.PC+1) != H(result) {
-			cpu.CYCSpecial += 2 // 	(+2 if to a new page)
-		}
-		cpu.PC = result
-	} else {
-		cpu.PC += 2
+        var oldpc uint16
+	if (cpu.Flags.N) == 1 {
+		oldpc = cpu.PC
+		cpu.PC += value
+		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
+			cpu.CYCSpecial+=2
+                } else { cpu.CYCSpecial++ }
 	}
+        
+           cpu.PC+=2 
 }
 
 // If the zero flag is clear then add the relative displacement to the program counter to cause a branch to a new location.
 func BNE(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
-	if cpu.Flags.Z == 0 {
-		var result uint16 = 0
-		cpu.CYCSpecial++ // CYC (+1 if branch succeeds)
-
-		result = cpu.PC + 2 + value
-		if value > 127 {
-			result = (cpu.PC + 2) - (0x100 - uint16(value))
-		}
-
-		
-		
-		if H(cpu.PC+1) != H(result) {
-			cpu.CYCSpecial += 2 // 	(+2 if to a new page)
-		}
-		cpu.PC = result
-	} else {
-		cpu.PC += 2
+        var oldpc uint16
+	if (cpu.Flags.Z) == 0 {
+		oldpc = cpu.PC
+		cpu.PC += value
+		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
+			cpu.CYCSpecial+=2
+                } else { cpu.CYCSpecial++ }
 	}
+        
+           cpu.PC+=2 
 }
 
 // If the negative flag is clear then add the relative displacement to the program counter to cause a branch to a new location.
 func BPL(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
-	if cpu.Flags.N == 0 {
-		var result uint16 = 0
-		cpu.CYCSpecial++ // CYC (+1 if branch succeeds)
-
-		result = cpu.PC + 2 + value
-		if value > 127 {
-			result = (cpu.PC + 2) - (0x100 - uint16(value))
-		}
-
-
-			
-
-		
-		if H(cpu.PC+1) != H(result) {
-			cpu.CYCSpecial += 2 // 	(+2 if to a new page)
-		}
-		cpu.PC = result
-	} else {
-		cpu.PC += 2
+        var oldpc uint16
+	if (cpu.Flags.N) == 0 {
+		oldpc = cpu.PC
+		cpu.PC += value
+		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
+			cpu.CYCSpecial+=2
+                } else { cpu.CYCSpecial++ }
 	}
+        
+           cpu.PC+=2 
 }
 
 // The BRK instruction forces the generation of an interrupt request. The program counter and processor status are pushed on the stack then the IRQ interrupt vector at $FFFE/F is loaded into the PC and the break flag in the status set to one.
@@ -249,23 +204,16 @@ func BRK(cpu *CPU, cart *cartridge.Cartridge) {
 func BVC(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
-	if cpu.Flags.V == 0 {
-		var result uint16 = 0
-		cpu.CYCSpecial++ // CYC (+1 if branch succeeds)
-
-		result = cpu.PC + 2 + value
-		if value > 127 {
-			result = (cpu.PC + 2) - (0x100 - uint16(value))
-		}
-
-				
-		if H(cpu.PC+1) != H(result) {
-			cpu.CYCSpecial += 2 // 	(+2 if to a new page)
-		}
-		cpu.PC = result
-	} else {
-		cpu.PC += 2
+        var oldpc uint16
+	if (cpu.Flags.V) == 0 {
+		oldpc = cpu.PC
+		cpu.PC += value
+		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
+			cpu.CYCSpecial+=2
+                } else { cpu.CYCSpecial++ }
 	}
+        
+           cpu.PC+=2 
 }
 
 
@@ -273,23 +221,16 @@ func BVC(cpu *CPU, value uint16) {
 func BVS(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
-	if cpu.Flags.V == 1 {
-		var result uint16 = 0
-		cpu.CYCSpecial++ // CYC (+1 if branch succeeds)
-
-		result = cpu.PC + 2 + value
-		if value > 127 {
-			result = (cpu.PC + 2) - (0x100 - uint16(value))
-		}
-
-		
-		if H(cpu.PC+1) != H(result) {
-			cpu.CYCSpecial += 2 // 	(+2 if to a new page)
-		}
-		cpu.PC = result
-	} else {
-		cpu.PC += 2
+        var oldpc uint16
+	if (cpu.Flags.V) == 1 {
+		oldpc = cpu.PC
+		cpu.PC += value
+		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
+			cpu.CYCSpecial+=2
+                } else { cpu.CYCSpecial++ }
 	}
+        
+           cpu.PC+=2 
 }
 
 // This instruction compares the contents of the accumulator with another memory held value and sets the zero and carry flags as appropriate.
