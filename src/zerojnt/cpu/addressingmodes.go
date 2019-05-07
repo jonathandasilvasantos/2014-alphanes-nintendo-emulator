@@ -21,7 +21,9 @@ import "zerojnt/cartridge"
 
 // Relative
 func Rel(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-	return uint16(RM(cpu, cart, cpu.PC+1))
+        reladdr := uint16(RM(cpu, cart, cpu.PC+1))
+	if (reladdr & 0x80) != 0{ reladdr |= 0xFF00 }
+        return reladdr
 }
 
 // Immediate

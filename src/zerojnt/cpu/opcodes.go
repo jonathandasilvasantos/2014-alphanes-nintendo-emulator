@@ -37,6 +37,9 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
         // Handle IO operations that takes CPU cycles
         cpu.CYC = cpu.CYC + cpu.IO.CPU_CYC_INCREASE
         cpu.IO.CPU_CYC_INCREASE = 0
+        if cpu.IO.CPU_RAM[0x6000] != 0 {
+            fmt.Printf("0x%x  %d\n", cpu.IO.CPU_RAM[0x6000], cpu.IO.CPU_RAM[0x6000])
+        }
 
 	
 	if cpu.CYC != 0 {
