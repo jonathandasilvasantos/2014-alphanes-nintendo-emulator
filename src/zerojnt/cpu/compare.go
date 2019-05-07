@@ -74,7 +74,7 @@ func DebugCompare(cpu *CPU, cart *cartridge.Cartridge) {
 	}
 
 	if err {
-		fmt.Printf("Error at line: %d -- %X %X %X\n", cpu.SwitchTimes, RM(cpu, cart, cpu.PC), RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2) )
+            fmt.Printf("Error at line: %d -- %X %X %X - SwitchTime: %d\n", cpu.SwitchTimes, RM(cpu, cart, cpu.PC), RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2), cpu.SwitchTimes )
 
 
 
