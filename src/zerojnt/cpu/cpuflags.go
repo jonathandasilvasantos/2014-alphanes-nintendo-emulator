@@ -31,6 +31,16 @@ func UpdateStatus(cpu *CPU) {
 	cpu.Flags.N = Bit7(s)
 }
 
+func SetP(cpu *CPU, value byte) {
+    SetC(cpu, ReadBit(value, 0)) // Carry
+    SetZ(cpu, ReadBit(value, 1)) // Zero
+    SetI(cpu, ReadBit(value, 2)) // Interrupt
+    SetD(cpu, ReadBit(value, 3)) // Decimal
+    // bit 4 and 5 have no effects on cpu
+    SetV(cpu, ReadBit(value, 6)) // Overflow
+    SetN(cpu, ReadBit(value, 7)) // Overflow
+}
+
 func SetC(cpu *CPU, value byte) {
         if (value != 0) { value = 1 }
 	cpu.Flags.C = value
