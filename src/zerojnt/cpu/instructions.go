@@ -447,57 +447,69 @@ func PLP(cpu *CPU) {
 }
 
 // Move each of the bits in either A or M one place to the left. Bit 0 is filled with the current value of the carry flag whilst the old bit 7 becomes the new carry flag value.
-func ROL (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
-	
-	if RM(cpu, cart, cpu.PC) == 0x2A {
-		
-		var oldbit byte = Bit7(cpu.A)
-		cpu.A = cpu.A << 1
-		cpu.A = SetBit(cpu.A, 0, cpu.Flags.C)
-		SetC(cpu, oldbit)
-		
-		ZeroFlag(cpu, uint16(cpu.A))
-                SetN(cpu, ((cpu.A >> 7) & 1))
-		return
-	}
-	
-	var addr uint16 = uint16(RM(cpu, cart, value))	
-	var oldbit byte = Bit7(byte(addr))
-	var tmp byte = byte(addr)
-	tmp = tmp << 1
-	tmp = SetBit(tmp, 0, cpu.Flags.C)
-	SetC(cpu, oldbit)
-	
-	ZeroFlag(cpu, uint16(tmp))
-        SetN(cpu, ((byte(tmp) >> 7) & 1))
-	WM(cpu, cart, value, tmp)
+func ROL (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
+
+    var oldcarry uint16 = uint16(cpu.Flags.C)
+
+    switch(op) {
+
+    case 0x26:  // Zp
+    case 0x2E:  // Abs
+        var result uint16 = uint16(RM(cpu, cart, value))
+        SetC(cpu, (byte(result) >> 7) & 1)
+        result = (result >> 1) | (oldcarry << 7)
+        ZeroFlag(cpu, result)
+	SetN(cpu, (( byte(result)  >> 7) & 1))
+        WM(cpu, cart, value, byte(result))
+        break
+
+    case 0x2A:  // Acc
+        SetC(cpu, ( (cpu.A >> 7) & 1))
+        cpu.A = (cpu.A >> 1) | (byte(oldcarry) << 7)
+        ZeroFlag(cpu, uint16(cpu.A))
+	SetN(cpu, (( byte(cpu.A)  >> 7) & 1))
+        break
+
+    case 0x36:  // Zpx
+        SetC(cpu, ( (cpu.X >> 7) & 1))
+        cpu.X = (cpu.X >> 1) | (byte(oldcarry) << 7)
+        ZeroFlag(cpu, uint16(cpu.X))
+	SetN(cpu, (( byte(cpu.X)  >> 7) & 1))
+    break
+    }
 }
 
 // Move each of the bits in either A or M one place to the right. Bit 7 is filled with the current value of the carry flag whilst the old bit 0 becomes the new carry flag value.
-func ROR (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
-	
-	if RM(cpu, cart, cpu.PC) == 0x6A {
-		
-		var oldbit byte = Bit0(cpu.A)
-		cpu.A = cpu.A >> 1
-		cpu.A = SetBit(cpu.A, 7, cpu.Flags.C)
-		SetC(cpu, oldbit)
-		
-		ZeroFlag(cpu, uint16(cpu.A))
-                SetN(cpu, ((cpu.A >> 7) & 1))
-		return
-	}
-	
-	var addr uint16 = uint16(RM(cpu, cart, value))
-	var oldbit byte = Bit0(byte(addr))
-	var tmp byte = byte(addr)
-	tmp = tmp >> 1
-	tmp = SetBit(tmp, 7, cpu.Flags.C)
-	SetC(cpu, oldbit)
-	
-	ZeroFlag(cpu, uint16(tmp))
-        SetN(cpu, ((byte(tmp) >> 7) & 1))
-	WM(cpu, cart, value, tmp)
+func ROR (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
+
+    var oldcarry uint16 = uint16(cpu.Flags.C)
+
+    switch(op) {
+
+    case 0x66:  // Zp
+    case 0x6E:  // Abs
+        var result uint16 = uint16(RM(cpu, cart, value))
+        SetC(cpu, (byte(result) >> 7) & 1)
+        result = (result << 1) | oldcarry
+        ZeroFlag(cpu, result)
+	SetN(cpu, (( byte(result)  >> 7) & 1))
+        WM(cpu, cart, value, byte(result))
+        break
+
+    case 0x6A:  // Acc
+        SetC(cpu, ( (cpu.A >> 7) & 1))
+        cpu.A = (cpu.A << 1) | byte(oldcarry)
+        ZeroFlag(cpu, uint16(cpu.A))
+	SetN(cpu, (( byte(cpu.A)  >> 7) & 1))
+        break
+
+    case 0x76:  // Zpx
+        SetC(cpu, ( (cpu.X >> 7) & 1))
+        cpu.X = (cpu.X << 1) | byte(oldcarry)
+        ZeroFlag(cpu, uint16(cpu.X))
+	SetN(cpu, (( byte(cpu.X)  >> 7) & 1))
+        break
+    }
 }
 
 

@@ -240,7 +240,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		break
 		
 	case 0x26: // ROL Zp
-		ROL(cpu, cart, Zp(cpu, cart))
+		ROL(cpu, cart, Zp(cpu, cart), 0x26)
 		cpu.CYC = 5
 		cpu.PC = cpu.PC + 2
 		break
@@ -265,7 +265,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		break
 		
 	case 0x2A: // ROL Acc
-		ROL(cpu, cart, 0)
+		ROL(cpu, cart, 0, 0x2A)
 		cpu.CYC = 2
 		cpu.PC = cpu.PC + 1
 		break
@@ -283,7 +283,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		break
 
 	case 0x2E: // ROL Abs
-		ROL(cpu, cart, Abs(cpu, cart))
+		ROL(cpu, cart, Abs(cpu, cart), 0x2E)
 		cpu.CYC = 6
 		cpu.PC = cpu.PC + 3
 		break
@@ -316,8 +316,8 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.PC = cpu.PC + 2
 		break
 		
-	case 0x36: // ROL Zp
-		ROL(cpu, cart, ZpX(cpu, cart))
+	case 0x36: // ROL ZpX
+		ROL(cpu, cart, ZpX(cpu, cart), 0x36)
 		cpu.CYC = 6
 		cpu.PC = cpu.PC + 2
 		break
@@ -362,7 +362,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		break
 		
 	case 0x3E: // ROL AbX
-		ROL(cpu, cart, AbsX(cpu, cart))
+		ROL(cpu, cart, AbsX(cpu, cart), 0x3E)
 		cpu.CYC = 7
 		cpu.PC = cpu.PC + 3
 		break
@@ -538,7 +538,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			break
 			
 		case 0x66: // ROR Zp
-			ROR(cpu, cart, Zp(cpu, cart))
+			ROR(cpu, cart, Zp(cpu, cart), 0x66)
 			cpu.CYC = 5
 			cpu.PC = cpu.PC + 2
 			break
@@ -559,7 +559,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			break
 			
 		case 0x6A: // ROR Acc
-			ROR(cpu, cart, 0)
+			ROR(cpu, cart, 0, 0x6A)
 			cpu.CYC = 2
 			cpu.PC = cpu.PC + 1
 			break
@@ -577,7 +577,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			break
 			
 		case 0x6E: // ROR Abs
-			ROR(cpu, cart, Abs(cpu, cart))
+			ROR(cpu, cart, Abs(cpu, cart), 0x6E)
 			cpu.CYC = 6
 			cpu.PC = cpu.PC + 3
 			break
@@ -612,7 +612,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			break
 			
 		case 0x76: // ROR ZpX
-			ROR(cpu, cart, ZpX(cpu, cart))
+			ROR(cpu, cart, ZpX(cpu, cart), 0x76)
 			cpu.CYC = 6
 			cpu.PC = cpu.PC + 2
 			break
@@ -655,7 +655,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			break
 
 		case 0x7E: // ROR AbX
-			ROR(cpu, cart, AbsX(cpu, cart))
+			ROR(cpu, cart, AbsX(cpu, cart), 0x7E)
 			cpu.CYC = 7
 			cpu.PC = cpu.PC + 3
 			break
