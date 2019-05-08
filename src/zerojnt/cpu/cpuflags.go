@@ -32,36 +32,43 @@ func UpdateStatus(cpu *CPU) {
 }
 
 func SetC(cpu *CPU, value byte) {
+        if (value != 0) { value = 1 }
 	cpu.Flags.C = value
 	cpu.P = SetBit(cpu.P, 0, value)
 }
 
 func SetZ(cpu *CPU, value byte) {
+        if (value != 0) { value = 1 }
 	cpu.Flags.Z = value
 	cpu.P = SetBit(cpu.P, 1, value)
 }
 
 func SetI(cpu *CPU, value byte) {
+        if (value != 0) { value = 1 }
 	cpu.Flags.I = value
 	cpu.P = SetBit(cpu.P, 2, value)
 }
 
 func SetD(cpu *CPU, value byte) {
+        if (value != 0) { value = 1 }
 	cpu.Flags.D = value
 	cpu.P = SetBit(cpu.P, 3, value)
 }
 
 func SetB(cpu *CPU, value byte) {
+        if (value != 0) { value = 1 }
 	cpu.Flags.B = value
 	cpu.P = SetBit(cpu.P, 4, value)
 }
 
 func SetV(cpu *CPU, value byte) {
+        if (value != 0) { value = 1 }
 	cpu.Flags.V = value
 	cpu.P = SetBit(cpu.P, 6, value)
 }
 
 func SetN(cpu *CPU, value byte) {
+        if (value != 0) { value = 1 }
 	cpu.Flags.N = value
 	cpu.P = SetBit(cpu.P, 7, value)
 } 

@@ -22,7 +22,7 @@ import "zerojnt/cartridge"
 //import "fmt"
 
 //This instruction adds the contents of a memory location to the accumulator together with the carry bit. If overflow occurs the carry bit is set, this enables multiple byte addition to be performed.
-func ADC (cpu *CPU, value uint16) {
+func xADC (cpu *CPU, value uint16) {
 	var tmp uint16 = uint16(cpu.A) + value
 	if(cpu.Flags.C == 1) {
 		tmp++
@@ -45,6 +45,46 @@ func ADC (cpu *CPU, value uint16) {
 	ZeroFlag(cpu, tmp)
 	cpu.A = byte(tmp)
 }
+
+
+//This instruction adds the contents of a memory location to the accumulator together with the carry bit. If overflow occurs the carry bit is set, this enables multiple byte addition to be performed.
+func ADC (cpu *CPU, value uint16) {
+
+	var tmp uint16 = uint16(cpu.A)
+        if uint16(tmp + value + uint16(cpu.Flags.C)) > 0xFF {
+            SetC(cpu,1)
+        } else {
+            SetC(cpu,0)
+        }
+
+
+	cpu.A = byte( byte(tmp) + byte(value) + cpu.Flags.C )
+        ZeroFlag(cpu, uint16(cpu.A))
+	SetN(cpu, ((cpu.A >> 7) & 1))
+
+
+        var n uint16 = uint16(cpu.A)
+        var m uint16 = uint16(tmp)
+        var o uint16 = uint16(value)
+
+        if (((n) ^ (m)) & ((n) ^ (o)) & 0x0080) == 0 {
+        //if (((cpu.A) ^ (tmp)) & ((ppu.A) ^ (value)) & 0x0080)
+	    SetV(cpu, 0)
+	} else {
+	    SetV(cpu, 1)
+	}
+
+        //#define overflowcalc(n, m, o) { /* n = result, m = accumulator, o = memory */ \
+            //if (((n) ^ (uint16_t)(m)) & ((n) ^ (o)) & 0x0080) setoverflow();\
+                    //else clearoverflow();\
+        //#endif
+
+
+
+
+}
+
+
 
 
 // A logical AND is performed, bit by bit, on the accumulator contents using the contents of a byte of memory.
