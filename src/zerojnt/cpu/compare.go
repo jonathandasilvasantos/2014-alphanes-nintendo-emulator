@@ -53,6 +53,13 @@ func DebugP(cpu *CPU, cart *cartridge.Cartridge) byte {
         return byte(P)
 }
 
+func DebugOp(cpu *CPU, cart *cartridge.Cartridge) byte {
+        debugLine := cpu.D.Lines[cpu.SwitchTimes+1]
+	OP, errPC := strconv.ParseUint( debug.GetOpcode(debugLine), 0, 64 )
+        if errPC != nil { log.Fatal(errPC) }
+        return byte(OP)
+}
+
 
 func DebugCompare(cpu *CPU, cart *cartridge.Cartridge) {
 	
@@ -63,7 +70,7 @@ func DebugCompare(cpu *CPU, cart *cartridge.Cartridge) {
 	Y, errY := strconv.ParseUint( debug.GetY(debugLine), 0, 64 )
 	P, errP := strconv.ParseUint( debug.GetP(debugLine), 0, 64 )
 	SP, errSP := strconv.ParseUint( debug.GetSP(debugLine), 0, 64 )
-	OP, errOP := strconv.ParseUint( debug.GetOp(debugLine), 0, 64 )
+	PC, errPC := strconv.ParseUint( debug.GetPC(debugLine), 0, 64 )
 
 	
 	if errA != nil { log.Fatal(errA) }
@@ -71,7 +78,7 @@ func DebugCompare(cpu *CPU, cart *cartridge.Cartridge) {
 	if errY != nil { log.Fatal(errY) }
 	if errP != nil { log.Fatal(errP) }
 	if errSP != nil { log.Fatal(errSP) }
-	if errOP != nil { log.Fatal(errOP) }
+	if errPC != nil { log.Fatal(errPC) }
 
 
 	
@@ -102,8 +109,8 @@ func DebugCompare(cpu *CPU, cart *cartridge.Cartridge) {
 		err = true
 	}
 	
-	if OP != uint64(cpu.PC) {
-		fmt.Printf("Error: PC:%X Debug PC:%X\n", uint64(cpu.PC), OP)
+	if PC != uint64(cpu.PC) {
+		fmt.Printf("Error: PC:%X Debug PC:%X\n", uint64(cpu.PC), PC)
 		err = true
 	}
 

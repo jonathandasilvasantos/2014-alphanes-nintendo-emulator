@@ -45,8 +45,12 @@ func OpenDebugFile(filename string) Debug {
 	return d
 }
 
-func GetOp(line string) string {
+func GetPC(line string) string {
 	return "0x"+line[0:4]
+}
+
+func GetOpcode(line string) string {
+	return "0x"+line[6:8]
 }
 
 func GetA(line string) string {
@@ -74,5 +78,5 @@ func GetSL(line string) string {
 }
 
 func PrintLine(line string) {
-	fmt.Printf("%s A:%s X:%s Y:%s P:%s SP:%s\n", GetOp(line), GetA(line), GetX(line), GetY(line), GetP(line), GetSP(line))
+	fmt.Printf("%s A:%s X:%s Y:%s P:%s SP:%s\n", GetPC(line), GetA(line), GetX(line), GetY(line), GetP(line), GetSP(line))
 }

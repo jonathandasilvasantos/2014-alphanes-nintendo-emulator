@@ -83,7 +83,7 @@ func emulate() {
 			ppudelay = ppudelay + 1
 		} else {
 			for x := 0; x < 3; x++ {
-                            //break
+                            if Nescpu.D.Enable { break }
 				ppu.Process(&Nesppu, &Cart)
 			}
 		}

@@ -22,6 +22,7 @@ import "zerojnt/cartridge"
 import "fmt"
 
 func nmi(cpu *CPU, cart *cartridge.Cartridge) {
+        fmt.Printf("[nmi]\n")
 	
 	PushMemory (cpu, H(cpu.PC))
 	PushMemory (cpu, L(cpu.PC))
@@ -44,6 +45,23 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		return
 	}
 	
+
+
+
+        op := RM(cpu, cart, cpu.PC)
+        if (cpu.D.Enable) && (cpu.SwitchTimes > 8000) {
+            if op != DebugOp(cpu, cart) {
+                if DebugOp(cpu, cart) == 0x48 {
+                        fmt.Printf("%x %x \n", op, DebugOp(cpu, cart))
+		        nmi(cpu, cart)
+                        //return
+                }
+            }
+        }
+
+
+
+
 	if cpu.D.Verbose && cpu.D.Enable { 
 		Verbose(cpu, cart)
 	}
@@ -68,9 +86,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.IO.NMI = false
 		return	
 	}
+
+        op = RM(cpu, cart, cpu.PC)
+
 	
 	
-	switch( RM(cpu, cart, cpu.PC) ) {
+	switch(RM(cpu, cart, cpu.PC)) {
 		
 	case 0x00: // BRK Imp
 		BRK(cpu, cart)
@@ -858,6 +879,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			
 		case 0xAE: // LDX Abs
 			LDX(cpu, uint16(RM(cpu, cart, Abs(cpu, cart))))
+                        if cpu.D.Enable {
+                            if (Abs(cpu, cart) >= 0x2000) && (Abs(cpu, cart) <= 0x2007) {
+                                cpu.X = DebugX(cpu, cart)
+                                SetP(cpu, DebugP(cpu, cart))
+                            }
+                        }
 			cpu.CYC = 4
 			cpu.PC = cpu.PC + 3
 			break
