@@ -22,11 +22,12 @@ import "zerojnt/cartridge"
 import "fmt"
 
 func nmi(cpu *CPU, cart *cartridge.Cartridge) {
-        fmt.Printf("[nmi]\n")
 	
+
 	PushMemory (cpu, H(cpu.PC))
 	PushMemory (cpu, L(cpu.PC))
-	PHP(cpu)	
+	PushMemory (cpu, cpu.P)
+        cpu.PC++
 	cpu.PC = LE(RM(cpu, cart, 0xFFFA), RM(cpu, cart, 0xFFFB))
 	SetI(cpu, 1)
 	cpu.IO.PPUSTATUS.WRITTEN =0
@@ -293,6 +294,11 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		
 	case 0x2C: // Bit Abs
 		BIT(cpu, cart, Abs(cpu, cart))
+                        if cpu.D.Enable {
+                            if ((Abs(cpu, cart) >= 0x2000) && (Abs(cpu, cart) <= 0x2007)) || (Abs(cpu, cart) == 0x4016) {
+                                SetP(cpu, DebugP(cpu, cart))
+                            }
+                        }
 		cpu.PC = cpu.PC + 3
 		cpu.CYC = 4
 		break
@@ -868,7 +874,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		case 0xAD: // LDA Abs
 			LDA(cpu, uint16(RM(cpu, cart, Abs(cpu, cart))))
                         if cpu.D.Enable {
-                            if (Abs(cpu, cart) >= 0x2000) && (Abs(cpu, cart) <= 0x2007) {
+                            if ((Abs(cpu, cart) >= 0x2000) && (Abs(cpu, cart) <= 0x2007)) || (Abs(cpu, cart) == 0x4016) {
                                 cpu.A = DebugA(cpu, cart)
                                 SetP(cpu, DebugP(cpu, cart))
                             }
@@ -953,6 +959,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			
 		case 0xBD: // LDA AbX
 			LDA(cpu, uint16(RM(cpu, cart,AbsX(cpu, cart))))
+                        if cpu.D.Enable {
+                            if ((Abs(cpu, cart) >= 0x2000) && (Abs(cpu, cart) <= 0x2007)) || (Abs(cpu, cart) == 0x4016) {
+                                cpu.A = DebugA(cpu, cart)
+                                SetP(cpu, DebugP(cpu, cart))
+                            }
+                        }
 			cpu.CYC = 4
 			if cpu.PageCrossed == 1 {
 				cpu.CYC++
