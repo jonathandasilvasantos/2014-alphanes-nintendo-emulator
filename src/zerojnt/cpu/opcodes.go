@@ -846,6 +846,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			
 		case 0xAD: // LDA Abs
 			LDA(cpu, uint16(RM(cpu, cart, Abs(cpu, cart))))
+                        if cpu.D.Enable {
+                            if (Abs(cpu, cart) >= 0x2000) && (Abs(cpu, cart) <= 0x2007) {
+                                cpu.A = DebugA(cpu, cart)
+                                SetP(cpu, DebugP(cpu, cart))
+                            }
+                        }
 			cpu.CYC = 4
 			cpu.PC = cpu.PC + 3
 			break

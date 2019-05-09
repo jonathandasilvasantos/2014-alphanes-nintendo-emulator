@@ -19,12 +19,11 @@ This file is part of Alphanes.
 package cpu
 
 import "zerojnt/cartridge"
-//import "fmt"
 
 //This instruction adds the contents of a memory location to the accumulator together with the carry bit. If overflow occurs the carry bit is set, this enables multiple byte addition to be performed.
 func xADC (cpu *CPU, value uint16) {
 	var tmp uint16 = uint16(cpu.A) + value
-	if(cpu.Flags.C == 1) {
+	if(FlagC(cpu) == 1) {
 		tmp++
 	}
 	
@@ -51,14 +50,14 @@ func xADC (cpu *CPU, value uint16) {
 func ADC (cpu *CPU, value uint16) {
 
 	var tmp uint16 = uint16(cpu.A)
-        if uint16(tmp + value + uint16(cpu.Flags.C)) > 0xFF {
+        if uint16(tmp + value + uint16(FlagC(cpu))) > 0xFF {
             SetC(cpu,1)
         } else {
             SetC(cpu,0)
         }
 
 
-	cpu.A = byte( byte(tmp) + byte(value) + cpu.Flags.C )
+	cpu.A = byte( byte(tmp) + byte(value) + FlagC(cpu) )
         ZeroFlag(cpu, uint16(cpu.A))
 	SetN(cpu, ((cpu.A >> 7) & 1))
 
@@ -118,7 +117,7 @@ func BCC(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
         var oldpc uint16
-	if (cpu.Flags.C) == 0 {
+	if (FlagC(cpu)) == 0 {
 		oldpc = cpu.PC
 		cpu.PC += value
 		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
@@ -134,7 +133,7 @@ func BCS(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
         var oldpc uint16
-	if (cpu.Flags.C) == 1 {
+	if (FlagC(cpu)) == 1 {
 		oldpc = cpu.PC
 		cpu.PC += value
 		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
@@ -150,7 +149,7 @@ func BEQ(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
         var oldpc uint16
-	if (cpu.Flags.Z) == 1 {
+	if (FlagZ(cpu)) == 1 {
 		oldpc = cpu.PC
 		cpu.PC += value
 		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
@@ -175,7 +174,7 @@ func BMI(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
         var oldpc uint16
-	if (cpu.Flags.N) == 1 {
+	if (FlagN(cpu)) == 1 {
 		oldpc = cpu.PC
 		cpu.PC += value
 		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
@@ -191,7 +190,7 @@ func BNE(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
         var oldpc uint16
-	if (cpu.Flags.Z) == 0 {
+	if (FlagZ(cpu)) == 0 {
 		oldpc = cpu.PC
 		cpu.PC += value
 		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
@@ -207,16 +206,17 @@ func BPL(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
         var oldpc uint16
-	if (cpu.Flags.N) == 0 {
+	if (FlagN(cpu)) == 0 {
 		oldpc = cpu.PC
 		cpu.PC += value
 		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
 			cpu.CYCSpecial+=2
                 } else { cpu.CYCSpecial++ }
-	}
+	} 
         
            cpu.PC+=2 
 }
+
 
 // The BRK instruction forces the generation of an interrupt request. The program counter and processor status are pushed on the stack then the IRQ interrupt vector at $FFFE/F is loaded into the PC and the break flag in the status set to one.
 func BRK(cpu *CPU, cart *cartridge.Cartridge) {
@@ -233,7 +233,7 @@ func BVC(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
         var oldpc uint16
-	if (cpu.Flags.V) == 0 {
+	if (FlagV(cpu)) == 0 {
 		oldpc = cpu.PC
 		cpu.PC += value
 		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
@@ -250,7 +250,7 @@ func BVS(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
         var oldpc uint16
-	if (cpu.Flags.V) == 1 {
+	if (FlagV(cpu)) == 1 {
 		oldpc = cpu.PC
 		cpu.PC += value
 		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
@@ -483,13 +483,12 @@ func PLP(cpu *CPU) {
 	cpu.P = all
 	cpu.P = SetBit(cpu.P, 4, b4)
 	cpu.P = SetBit(cpu.P, 5, b5)
-	UpdateStatus(cpu)
 }
 
 // Move each of the bits in either A or M one place to the left. Bit 0 is filled with the current value of the carry flag whilst the old bit 7 becomes the new carry flag value.
 func ROL (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
 
-    var oldcarry uint16 = uint16(cpu.Flags.C)
+    var oldcarry uint16 = uint16(FlagC(cpu))
 
     switch(op) {
 
@@ -522,7 +521,7 @@ func ROL (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
 // Move each of the bits in either A or M one place to the right. Bit 7 is filled with the current value of the carry flag whilst the old bit 0 becomes the new carry flag value.
 func ROR (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
 
-    var oldcarry uint16 = uint16(cpu.Flags.C)
+    var oldcarry uint16 = uint16(FlagC(cpu))
 
     switch(op) {
 
@@ -563,7 +562,6 @@ func RTI(cpu *CPU) {
 	cpu.P = SetBit(cpu.P, 4, b4)
 	cpu.P = SetBit(cpu.P, 5, b5)
 
-	UpdateStatus(cpu)
 	var h byte = PopMemory(cpu)
 	var l byte = PopMemory(cpu)
 	cpu.PC = LE(h, l)
@@ -581,7 +579,7 @@ func RTS (cpu *CPU) {
 // Obs: sbc(x) = adc(255-x)
 func SBC (cpu *CPU, value uint16) {
 	var tmp uint16 = uint16(cpu.A) + (255 - value)
-	if(cpu.Flags.C == 1) {
+	if(FlagC(cpu) == 1) {
 		tmp++
 	}
 	

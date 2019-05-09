@@ -18,18 +18,15 @@ This file is part of Alphanes.
 */
 package cpu
 
-func UpdateStatus(cpu *CPU) {
-	
-	var s byte = cpu.P
-	cpu.Flags.C = Bit0(s) 
-	cpu.Flags.Z = Bit1(s) 
-	cpu.Flags.I = Bit2(s) 
-	cpu.Flags.D = Bit3(s) 
-	cpu.Flags.B = Bit4(s) 
-	// bit-5 Aways set
-	cpu.Flags.V = Bit6(s) 
-	cpu.Flags.N = Bit7(s)
-}
+
+func FlagC(cpu *CPU) byte { return (cpu.P << 7) >> 7}
+func FlagZ(cpu *CPU) byte { return (cpu.P << 6) >> 7 }
+func FlagI(cpu *CPU) byte { return (cpu.P << 5) >> 7 }
+func FlagD(cpu *CPU) byte { return (cpu.P << 4) >> 7 }
+func FlagV(cpu *CPU) byte { return (cpu.P << 1) >> 7 }
+func FlagN(cpu *CPU) byte { return cpu.P  >> 7 }
+
+
 
 func SetP(cpu *CPU, value byte) {
     SetC(cpu, ReadBit(value, 0)) // Carry
@@ -39,46 +36,40 @@ func SetP(cpu *CPU, value byte) {
     // bit 4 and 5 have no effects on cpu
     SetV(cpu, ReadBit(value, 6)) // Overflow
     SetN(cpu, ReadBit(value, 7)) // Overflow
+    cpu.P = value
 }
 
 func SetC(cpu *CPU, value byte) {
         if (value != 0) { value = 1 }
-	cpu.Flags.C = value
 	cpu.P = SetBit(cpu.P, 0, value)
 }
 
 func SetZ(cpu *CPU, value byte) {
         if (value != 0) { value = 1 }
-	cpu.Flags.Z = value
 	cpu.P = SetBit(cpu.P, 1, value)
 }
 
 func SetI(cpu *CPU, value byte) {
         if (value != 0) { value = 1 }
-	cpu.Flags.I = value
 	cpu.P = SetBit(cpu.P, 2, value)
 }
 
 func SetD(cpu *CPU, value byte) {
         if (value != 0) { value = 1 }
-	cpu.Flags.D = value
 	cpu.P = SetBit(cpu.P, 3, value)
 }
 
 func SetB(cpu *CPU, value byte) {
         if (value != 0) { value = 1 }
-	cpu.Flags.B = value
 	cpu.P = SetBit(cpu.P, 4, value)
 }
 
 func SetV(cpu *CPU, value byte) {
         if (value != 0) { value = 1 }
-	cpu.Flags.V = value
 	cpu.P = SetBit(cpu.P, 6, value)
 }
 
 func SetN(cpu *CPU, value byte) {
         if (value != 0) { value = 1 }
-	cpu.Flags.N = value
 	cpu.P = SetBit(cpu.P, 7, value)
 } 

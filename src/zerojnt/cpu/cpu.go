@@ -30,7 +30,6 @@ type CPU struct {
 	X byte // X Index
 	Y byte // Y Index
 	P byte // Status
-	Flags StatusFlags // Status Flags (From Status byte)
 	PC uint16 // Program Count 16bits
 	SP byte // Stack Pointer
 	CYC uint16
@@ -42,16 +41,6 @@ type CPU struct {
 	SwitchTimes int
 	D debug.Debug
 	IO ioports.IOPorts
-}
-
-type StatusFlags struct {
-	C byte
-	Z byte
-	I byte
-	D byte
-	B byte
-	V byte
-	N byte
 }
 
 func StartCPU() CPU {
@@ -72,7 +61,6 @@ func ResetCPU(cpu *CPU) {
 	cpu.Y = 0
 	// 00100000 = 32
 	cpu.P = 0x24
-	UpdateStatus(cpu)
 
 	cpu.PC = 0xC000
 	
