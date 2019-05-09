@@ -24,14 +24,47 @@ import "zerojnt/debug"
 import "zerojnt/cartridge"
 import "log"
 
+func DebugA(cpu *CPU, cart *cartridge.Cartridge) byte {
+        debugLine := cpu.D.Lines[cpu.SwitchTimes+1]
+	A, errA := strconv.ParseUint( debug.GetA(debugLine), 0, 64 )
+        if errA != nil { log.Fatal(errA) }
+        return byte(A)
+}
+
+func DebugX(cpu *CPU, cart *cartridge.Cartridge) byte {
+        debugLine := cpu.D.Lines[cpu.SwitchTimes+1]
+	X, errX := strconv.ParseUint( debug.GetX(debugLine), 0, 64 )
+        if errX != nil { log.Fatal(errX) }
+        return byte(X)
+}
+
+
+func DebugY(cpu *CPU, cart *cartridge.Cartridge) byte {
+        debugLine := cpu.D.Lines[cpu.SwitchTimes+1]
+	Y, errY := strconv.ParseUint( debug.GetY(debugLine), 0, 64 )
+        if errY != nil { log.Fatal(errY) }
+        return byte(Y)
+}
+
+func DebugP(cpu *CPU, cart *cartridge.Cartridge) byte {
+        debugLine := cpu.D.Lines[cpu.SwitchTimes+1]
+	P, errP := strconv.ParseUint( debug.GetP(debugLine), 0, 64 )
+        if errP != nil { log.Fatal(errP) }
+        return byte(P)
+}
+
+
 func DebugCompare(cpu *CPU, cart *cartridge.Cartridge) {
 	
-	A, errA := strconv.ParseUint( debug.GetA(cpu.D.Lines[cpu.SwitchTimes]), 0, 64 )
-	X, errX := strconv.ParseUint( debug.GetX(cpu.D.Lines[cpu.SwitchTimes]), 0, 64 )
-	Y, errY := strconv.ParseUint( debug.GetY(cpu.D.Lines[cpu.SwitchTimes]), 0, 64 )
-	P, errP := strconv.ParseUint( debug.GetP(cpu.D.Lines[cpu.SwitchTimes]), 0, 64 )
-	SP, errSP := strconv.ParseUint( debug.GetSP(cpu.D.Lines[cpu.SwitchTimes]), 0, 64 )
-	OP, errOP := strconv.ParseUint( debug.GetOp(cpu.D.Lines[cpu.SwitchTimes]), 0, 64 )
+        debugLine := cpu.D.Lines[cpu.SwitchTimes]
+
+	A, errA := strconv.ParseUint( debug.GetA(debugLine), 0, 64 )
+	X, errX := strconv.ParseUint( debug.GetX(debugLine), 0, 64 )
+	Y, errY := strconv.ParseUint( debug.GetY(debugLine), 0, 64 )
+	P, errP := strconv.ParseUint( debug.GetP(debugLine), 0, 64 )
+	SP, errSP := strconv.ParseUint( debug.GetSP(debugLine), 0, 64 )
+	OP, errOP := strconv.ParseUint( debug.GetOp(debugLine), 0, 64 )
+
 	
 	if errA != nil { log.Fatal(errA) }
 	if errX != nil { log.Fatal(errX) }
@@ -39,7 +72,8 @@ func DebugCompare(cpu *CPU, cart *cartridge.Cartridge) {
 	if errP != nil { log.Fatal(errP) }
 	if errSP != nil { log.Fatal(errSP) }
 	if errOP != nil { log.Fatal(errOP) }
-	
+
+
 	
 	var err bool = false
 	
@@ -85,7 +119,7 @@ func DebugCompare(cpu *CPU, cart *cartridge.Cartridge) {
 			fmt.Printf("%s\n", cpu.D.Lines[cpu.SwitchTimes-i ])
 		}
 
-		fmt.Printf("%s\n", cpu.D.Lines[cpu.SwitchTimes])
+		fmt.Printf("%s\n", debugLine)
 		cpu.Running = false
 	}
 
