@@ -490,20 +490,13 @@ func ROL (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
         break
 
     case 0x2A:  // Acc
+        
         var tmp byte = (cpu.A >> 7) & 0x1
         cpu.A = (cpu.A << 1) | FlagC(cpu)
         SetC(cpu, tmp)
         ZeroFlag(cpu, uint16(cpu.A))
 	SetN(cpu, (( byte(cpu.A)  >> 7) & 1))
         break
-
-    case 0x3E:  // Zpx
-        var tmp byte = (cpu.X >> 7) & 0x1
-        cpu.X = (cpu.X << 1) | FlagC(cpu)
-        SetC(cpu, tmp)
-        ZeroFlag(cpu, uint16(cpu.X))
-	SetN(cpu, (( byte(cpu.X)  >> 7) & 1))
-    break
     }
 }
 
@@ -531,14 +524,6 @@ func ROR (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
         SetC(cpu, tmp)
         ZeroFlag(cpu, uint16(cpu.A))
 	SetN(cpu, (( byte(cpu.A)  >> 7) & 1))
-        break
-
-    case 0x76:  // Zpx
-        var tmp byte =  cpu.X & 0x1
-        cpu.X = (cpu.A >> 1) | (FlagC(cpu) << 7)
-        SetC(cpu, tmp)
-        ZeroFlag(cpu, uint16(cpu.X))
-	SetN(cpu, (( byte(cpu.X)  >> 7) & 1))
         break
     }
 }

@@ -81,7 +81,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 	}
 	
 	// Handle NMI Interruption
-	if cpu.IO.NMI {
+	if cpu.IO.NMI && (cpu.D.Enable == false){
 		nmi(cpu, cart)
 		cpu.IO.NMI = false
 		return	
@@ -343,7 +343,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		break
 		
 	case 0x36: // ROL ZpX
-		ROL(cpu, cart, ZpX(cpu, cart), 0x36)
+		ROL(cpu, cart, ZpX(cpu, cart), 0x2A)
 		cpu.CYC = 6
 		cpu.PC = cpu.PC + 2
 		break
@@ -638,7 +638,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			break
 			
 		case 0x76: // ROR ZpX
-			ROR(cpu, cart, ZpX(cpu, cart), 0x76)
+			ROR(cpu, cart, ZpX(cpu, cart), 0x6A)
 			cpu.CYC = 6
 			cpu.PC = cpu.PC + 2
 			break
