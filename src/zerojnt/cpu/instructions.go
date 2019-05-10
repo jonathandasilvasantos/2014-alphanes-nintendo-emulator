@@ -22,7 +22,7 @@ import "zerojnt/cartridge"
 import "fmt"
 
 //This instruction adds the contents of a memory location to the accumulator together with the carry bit. If overflow occurs the carry bit is set, this enables multiple byte addition to be performed.
-func ADC (cpu *CPU, value uint16) {
+func iADC (cpu *CPU, value uint16) {
 	var tmp uint16 = uint16(cpu.A) + value
 	if(FlagC(cpu) == 1) {
 		tmp++
@@ -48,38 +48,21 @@ func ADC (cpu *CPU, value uint16) {
 
 
 //This instruction adds the contents of a memory location to the accumulator together with the carry bit. If overflow occurs the carry bit is set, this enables multiple byte addition to be performed.
-func xADC (cpu *CPU, value uint16) {
+func ADC (cpu *CPU, value uint16) {
 
-	var tmp uint16 = uint16(cpu.A)
-        if uint16(tmp + value + uint16(FlagC(cpu))) > 0xFF {
-            SetC(cpu,1)
-        } else {
-            SetC(cpu,0)
-        }
-
-
-	cpu.A = byte( byte(tmp) + byte(value) + FlagC(cpu) )
-        ZeroFlag(cpu, uint16(cpu.A))
-	SetN(cpu, ((cpu.A >> 7) & 1))
-
-
-        var n uint16 = uint16(cpu.A)
-        var m uint16 = uint16(tmp)
-        var o uint16 = uint16(value)
-
-        if (((n) ^ (m)) & ((n) ^ (o)) & 0x0080) == 0 {
-        //if (((cpu.A) ^ (tmp)) & ((ppu.A) ^ (value)) & 0x0080)
-	    SetV(cpu, 0)
-	} else {
-	    SetV(cpu, 1)
-	}
-
-        //#define overflowcalc(n, m, o) { /* n = result, m = accumulator, o = memory */ \
-            //if (((n) ^ (uint16_t)(m)) & ((n) ^ (o)) & 0x0080) setoverflow();\
-                    //else clearoverflow();\
-        //#endif
-
-
+    var sum, j, k, c6, c7 byte
+    //b := RM(cpu, cart value)
+    b := byte(value)
+    j = (b >> 7) & 0x1
+    k = (cpu.A >> 7) & 0x1
+    sum = cpu.A + b + FlagC(cpu)
+    c6 = j ^ k ^ ((sum >> 7) & 0x1);
+    c7 = (j & k) | (j & c6) | (k & c6);
+    SetC(cpu, c7)
+    SetV(cpu, c6 ^ c7)
+    ZeroFlag(cpu, uint16(sum))
+     SetN(cpu, (j ^ k ^ c6))
+    cpu.A = sum
 
 
 }
@@ -514,7 +497,7 @@ func ROL (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
 	SetN(cpu, (( byte(cpu.A)  >> 7) & 1))
         break
 
-    case 0x36:  // Zpx
+    case 0x3E:  // Zpx
         var tmp byte = (cpu.X >> 7) & 0x1
         cpu.X = (cpu.X << 1) | FlagC(cpu)
         SetC(cpu, tmp)
@@ -564,16 +547,10 @@ func ROR (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
 // The RTI instruction is used at the end of an interrupt processing routine. It pulls the processor flags from the stack followed by the program counter.
 func RTI(cpu *CPU) {
 
-	var all byte = PopMemory(cpu)
-	var b4 = Bit4(cpu.P)
-	var b5 = Bit5(cpu.P)
-        newP := all
-        newP = SetBit(newP, 4, b4)
-        newP = SetBit(newP, 5, b5)
-        SetP(cpu, newP)
+        SetP(cpu, PopMemory(cpu))
 
-	var h byte = PopMemory(cpu)
 	var l byte = PopMemory(cpu)
+	var h byte = PopMemory(cpu)
 	cpu.PC = LE(h, l)
 }
 

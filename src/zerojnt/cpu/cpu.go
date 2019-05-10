@@ -31,6 +31,7 @@ type CPU struct {
 	Y byte // Y Index
 	P byte // Status
 	PC uint16 // Program Count 16bits
+        lastPC uint16
 	SP byte // Stack Pointer
 	CYC uint16
 	CYCSpecial uint16 // For cases when we need to add more cycles for an operation

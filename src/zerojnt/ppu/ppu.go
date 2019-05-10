@@ -21,6 +21,7 @@ package ppu
 import "fmt"
 import "zerojnt/cartridge"
 import "zerojnt/ioports"
+import "zerojnt/debug"
 import "os"
 import "os/exec"
 
@@ -37,6 +38,7 @@ type PPU struct {
 	Name string
 	CYC int		
 	SCANLINE int
+        D *debug.PPUDebug
 	
 	
 	

@@ -17,6 +17,7 @@ src/pkg/launchpad.net
 [568a].out
 *~
 *.orig
+*.ppu
 *.rej
 *.exe
 .*.swp

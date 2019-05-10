@@ -24,10 +24,9 @@ import "fmt"
 func nmi(cpu *CPU, cart *cartridge.Cartridge) {
 	
 
-	PushMemory (cpu, H(cpu.PC))
-	PushMemory (cpu, L(cpu.PC))
+	PushMemory (cpu, L(cpu.lastPC))
+	PushMemory (cpu, H(cpu.lastPC))
 	PushMemory (cpu, cpu.P)
-        cpu.PC++
 	cpu.PC = LE(RM(cpu, cart, 0xFFFA), RM(cpu, cart, 0xFFFB))
 	SetI(cpu, 1)
 	cpu.IO.PPUSTATUS.WRITTEN =0
@@ -89,8 +88,8 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 	}
 
         op = RM(cpu, cart, cpu.PC)
+        cpu.lastPC = cpu.PC
 
-	
 	
 	switch(RM(cpu, cart, cpu.PC)) {
 		
@@ -874,7 +873,10 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		case 0xAD: // LDA Abs
 			LDA(cpu, uint16(RM(cpu, cart, Abs(cpu, cart))))
                         if cpu.D.Enable {
-                            if ((Abs(cpu, cart) >= 0x2000) && (Abs(cpu, cart) <= 0x2007)) || (Abs(cpu, cart) == 0x4016) {
+                            if ((Abs(cpu, cart) >= 0x2000) && (Abs(cpu, cart) <= 0x2007)) ||
+                            (Abs(cpu, cart) == 0x4016) || 
+                            (Abs(cpu, cart) == 0x4015) || 
+                            (Abs(cpu, cart) == 0x4017)  {
                                 cpu.A = DebugA(cpu, cart)
                                 SetP(cpu, DebugP(cpu, cart))
                             }
@@ -1296,5 +1298,5 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 }
 
 func Verbose(cpu *CPU, cart *cartridge.Cartridge) {
-	fmt.Printf("%4X  %2X  %2X %2X                       A:%2X X:%2X Y:%2X P:%2X SP:%2X CYC:%d SL: %d\n", cpu.PC, RM(cpu, cart, cpu.PC), RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2), cpu.A, cpu.X, cpu.Y, cpu.P, cpu.SP, cpu.D.CURRENT_PPU.CYC, cpu.D.CURRENT_PPU.SCANLINE )
+	fmt.Printf("%4X  %2X  %2X %2X                       A:%2X X:%2X Y:%2X P:%2X SP:%2X CYC:%d SL: %d\n", cpu.PC, RM(cpu, cart, cpu.PC), RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2), cpu.A, cpu.X, cpu.Y, cpu.P, cpu.SP, 0, 0 )
 }

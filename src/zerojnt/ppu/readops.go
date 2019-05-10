@@ -24,7 +24,12 @@ import "zerojnt/mapper"
 
 func ReadPPURam(ppu *PPU, addr uint16) byte {
 
+
     newaddr := mapper.PPU(ppu.IO.CART, addr)
+
+    if ppu.D.Enable {
+        if newaddr < uint16(len(ppu.D.DUMP)) { return ppu.D.DUMP[addr] }
+    }
 
 
     var page8bits uint16 = 8192

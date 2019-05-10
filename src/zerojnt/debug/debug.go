@@ -21,15 +21,36 @@ package debug
 import "fmt"
 import "io/ioutil"
 import "strings"
-import "zerojnt/ppu"
+//import "zerojnt/ppu"
 import "log"
 
 type Debug struct {
-	CURRENT_PPU *ppu.PPU
 	Lines []string
 	Verbose bool
 	Enable bool
 }
+
+type PPUDebug struct {
+	DUMP []byte
+	Enable bool
+}
+
+func OpenPPUDumpFile(filename string) PPUDebug {
+	var d PPUDebug
+	
+	fmt.Printf("Openning PPU dump file: %s\n", filename)
+	
+	content, err := ioutil.ReadFile(filename)
+	if err != nil {
+	    log.Fatal("Error. Cannot open the debug file.")
+	}
+	d.Enable = false
+        d.DUMP = content
+	return d
+}
+
+
+
 
 func OpenDebugFile(filename string) Debug {
 	var d Debug

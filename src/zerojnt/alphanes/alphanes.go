@@ -22,6 +22,7 @@ import "zerojnt/cartridge"
 import "zerojnt/cpu"
 import "zerojnt/ppu"
 import "zerojnt/ioports"
+import "strings"
 import "zerojnt/debug"
 import "fmt"
 import "os"
@@ -36,6 +37,7 @@ import "os"
 	 var Nesppu ppu.PPU
 	 var Nesio ioports.IOPorts
 	 var Debug debug.Debug
+         var PPUDebug debug.PPUDebug
 	 var Alphanes Emulator
     
     func main() {
@@ -44,13 +46,18 @@ import "os"
 		fmt.Println("Loading " + os.Args[1])
 		Cart = cartridge.LoadRom(os.Args[1])
 	
-		if len(os.Args) >= 3 {
+		if (len(os.Args) >= 3) && strings.Contains( string(os.Args[2]), ".debug") {
 			fmt.Printf("Debug mode is on\n")
 			Debug = debug.OpenDebugFile(os.Args[2])
 		} else {
 			Debug.Enable = false
 			fmt.Printf("Debug mode is off\n")
 		}
+
+                if len(os.Args) >= 3 && strings.Contains(os.Args[2], ".ppu") {
+                    PPUDebug = debug.OpenPPUDumpFile(os.Args[2])
+                    PPUDebug.Enable = true
+                }
 
 
 	
@@ -61,7 +68,7 @@ import "os"
 		cpu.SetResetVector(&Nescpu, &Cart)
 
 		Nesppu = ppu.StartPPU(&Nescpu.IO)
-		Nescpu.D.CURRENT_PPU = &Nesppu
+                Nesppu.D = &PPUDebug
 		
 		
 		Alphanes.Running = true		
