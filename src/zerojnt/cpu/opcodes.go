@@ -24,8 +24,7 @@ import "fmt"
 func nmi(cpu *CPU, cart *cartridge.Cartridge) {
 	
 
-	PushMemory (cpu, L(cpu.lastPC))
-	PushMemory (cpu, H(cpu.lastPC))
+        PushWord(cpu, cpu.lastPC)
 	PushMemory (cpu, cpu.P)
 	cpu.PC = LE(RM(cpu, cart, 0xFFFA), RM(cpu, cart, 0xFFFB))
 	SetI(cpu, 1)
@@ -309,7 +308,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		break
 
 	case 0x2E: // ROL Abs
-		ROL(cpu, cart, Abs(cpu, cart), 0x2E)
+		ROL(cpu, cart, Abs(cpu, cart), 0x26)
 		cpu.CYC = 6
 		cpu.PC = cpu.PC + 3
 		break
@@ -603,7 +602,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			break
 			
 		case 0x6E: // ROR Abs
-			ROR(cpu, cart, Abs(cpu, cart), 0x6E)
+			ROR(cpu, cart, Abs(cpu, cart), 0x66)
 			cpu.CYC = 6
 			cpu.PC = cpu.PC + 3
 			break

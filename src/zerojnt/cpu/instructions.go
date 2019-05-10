@@ -204,8 +204,7 @@ func BPL(cpu *CPU, value uint16) {
 
 // The BRK instruction forces the generation of an interrupt request. The program counter and processor status are pushed on the stack then the IRQ interrupt vector at $FFFE/F is loaded into the PC and the break flag in the status set to one.
 func BRK(cpu *CPU, cart *cartridge.Cartridge) {
-	PushMemory (cpu, L(cpu.PC+1))
-	PushMemory (cpu, H(cpu.PC+1))	
+        PushWord(cpu, cpu.PC)
 	PushMemory (cpu, cpu.P)
 	cpu.PC = LE( RM(cpu, cart, 0xFFFE), RM(cpu, cart, 0xFFFF))
 	SetB(cpu, 1)
@@ -380,8 +379,7 @@ func JMP(cpu *CPU, value uint16) {
 
 // The JSR instruction pushes the address (minus one) of the return point on to the stack and then sets the program counter to the target memory address.
 func JSR(cpu *CPU, value uint16) {
-	PushMemory (cpu, H(cpu.PC+2))
-	PushMemory (cpu, L(cpu.PC+2))
+        PushWord(cpu, cpu.PC+3)
 	cpu.PC = value
 }
 
@@ -477,9 +475,7 @@ func ROL (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
 
     switch(op) {
 
-    default:
     case 0x26:  // Zp
-    //case 0x2E:  // Abs
         var result uint16 = uint16(RM(cpu, cart, value))
         var tmp = (result >> 7) & 0x1
         result = (result << 1) | uint16(FlagC(cpu))
@@ -502,14 +498,14 @@ func ROL (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
 
 // Move each of the bits in either A or M one place to the right. Bit 7 is filled with the current value of the carry flag whilst the old bit 0 becomes the new carry flag value.
 func ROR (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
+    //fmt.Printf("%x = ", value)
 
     switch(op) {
 
-    default:
     case 0x66:
-    //case 0x6E:  // Abs
 
         var result uint16 = uint16(RM(cpu, cart, value))
+    //fmt.Printf("%X\n", result)
         tmp := (result & 0x1)
         result = (result >> 1) | (uint16(FlagC(cpu)) << 7)
         SetC(cpu, byte(tmp))
@@ -534,16 +530,13 @@ func RTI(cpu *CPU) {
 
         SetP(cpu, PopMemory(cpu))
 
-	var l byte = PopMemory(cpu)
-	var h byte = PopMemory(cpu)
-	cpu.PC = LE(h, l)
+
+	cpu.PC = PopWord(cpu)
 }
 
 // The RTS instruction is used at the end of a subroutine to return to the calling routine. It pulls the program counter (minus one) from the stack.
 func RTS (cpu *CPU) {
-	var h byte = PopMemory(cpu)
-	var l byte = PopMemory(cpu)
-	cpu.PC = LE(h, l)+1
+	cpu.PC = PopWord(cpu)
 }
 
 // This instruction subtracts the contents of a memory location to the accumulator together with the not of the carry bit. If overflow occurs the carry bit is clear, this enables multiple byte subtraction to be performed.

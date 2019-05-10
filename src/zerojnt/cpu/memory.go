@@ -57,6 +57,19 @@ func WM(cpu *CPU, cart *cartridge.Cartridge, addr uint16, value byte) {
 	cpu.IO.CPU_RAM[newaddr] = value	
 }
 
+func PushWord(cpu *CPU, v uint16) {
+  PushMemory(cpu, byte(v >> 8))
+  PushMemory(cpu, byte(v))
+}
+
+func PopWord(cpu *CPU) uint16 {
+    var lo, hi byte
+    hi = PopMemory(cpu);
+    lo = PopMemory(cpu);
+    return LE(hi, lo)
+}
+
+
 func PushMemory(cpu *CPU, v byte) {
 	cpu.IO.CPU_RAM[0x0100 + int(cpu.SP)] = v
 	cpu.SP--
