@@ -21,9 +21,9 @@ import "zerojnt/cartridge"
 
 // Relative
 func Rel(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-        reladdr := uint16(RM(cpu, cart, cpu.PC+1))
-	if (reladdr & 0x80) != 0{ reladdr |= 0xFF00 }
-        return reladdr
+        reladdr := RM(cpu, cart, cpu.PC+1)
+        addr := int8(reladdr)
+        return uint16(addr) + uint16(cpu.PC+2)
 }
 
 // Immediate
@@ -57,6 +57,7 @@ func Zp(cpu *CPU, cart *cartridge.Cartridge) uint16 {
 // Zero Page-X
 func ZpX(cpu *CPU, cart *cartridge.Cartridge) uint16 {
         return uint16(  RM(cpu, cart, cpu.PC+1) + cpu.X )
+	//return LE(RM(cpu, cart, cpu.PC+1) + cpu.X, 0)
 }
 
 // Zero Page-Y

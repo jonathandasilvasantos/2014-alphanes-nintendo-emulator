@@ -98,50 +98,35 @@ func ASL (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 
 // If the carry flag is clear then add the relative displacement to the program counter to cause a branch to a new location.
 func BCC(cpu *CPU, value uint16) {
-	cpu.CYCSpecial = 0;
+    cpu.CYCSpecial = 0;
 
-        var oldpc uint16
-	if (FlagC(cpu)) == 0 {
-		oldpc = cpu.PC
-		cpu.PC += value
-		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
-			cpu.CYCSpecial+=2
-                } else { cpu.CYCSpecial++ }
-	}
-        
-           cpu.PC+=2 
+    if (FlagC(cpu)) == 0 {
+        Branch(cpu, value)
+        return
+    }
+    cpu.PC += 2
 }
 
 // If the carry flag is set then add the relative displacement to the program counter to cause a branch to a new location.
 func BCS(cpu *CPU, value uint16) {
-	cpu.CYCSpecial = 0;
+    cpu.CYCSpecial = 0;
 
-        var oldpc uint16
-	if (FlagC(cpu)) == 1 {
-		oldpc = cpu.PC
-		cpu.PC += value
-		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
-			cpu.CYCSpecial+=2
-                } else { cpu.CYCSpecial++ }
-	}
-        
-           cpu.PC+=2 
+    if (FlagC(cpu)) == 1 {
+        Branch(cpu, value)
+        return
+    }
+    cpu.PC += 2
 }
 
 // If the zero flag is set then add the relative displacement to the program counter to cause a branch to a new location.
 func BEQ(cpu *CPU, value uint16) {
 	cpu.CYCSpecial = 0;
 
-        var oldpc uint16
-	if (FlagZ(cpu)) == 1 {
-		oldpc = cpu.PC
-		cpu.PC += value
-		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
-			cpu.CYCSpecial+=2
-                } else { cpu.CYCSpecial++ }
-	}
-        
-           cpu.PC+=2 
+    if (FlagZ(cpu)) == 1 {
+        Branch(cpu, value)
+        return
+    }
+    cpu.PC += 2
 }
 
 // This instructions is used to test if one or more bits are set in a target memory location. The mask pattern in A is ANDed with the value in memory to set or clear the zero flag, but the result is not kept. Bits 7 and 6 of the value from memory are copied into the N and V flags.
@@ -155,50 +140,37 @@ func BIT(cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 
 // If the negative flag is set then add the relative displacement to the program counter to cause a branch to a new location.
 func BMI(cpu *CPU, value uint16) {
-	cpu.CYCSpecial = 0;
+    cpu.CYCSpecial = 0;
 
-        var oldpc uint16
-	if (FlagN(cpu)) == 1 {
-		oldpc = cpu.PC
-		cpu.PC += value
-		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
-			cpu.CYCSpecial+=2
-                } else { cpu.CYCSpecial++ }
-	}
-        
-           cpu.PC+=2 
+    if (FlagN(cpu)) == 1 {
+        Branch(cpu, value)
+        return
+    }
+    cpu.PC += 2
 }
 
 // If the zero flag is clear then add the relative displacement to the program counter to cause a branch to a new location.
 func BNE(cpu *CPU, value uint16) {
-	cpu.CYCSpecial = 0;
+    cpu.CYCSpecial = 0;
 
-        var oldpc uint16
-	if (FlagZ(cpu)) == 0 {
-		oldpc = cpu.PC
-		cpu.PC += value
-		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
-			cpu.CYCSpecial+=2
-                } else { cpu.CYCSpecial++ }
-	}
-        
-           cpu.PC+=2 
+    if (FlagZ(cpu)) == 0 {
+        Branch(cpu, value)
+        return
+    }
+    cpu.PC += 2
 }
+
+
 
 // If the negative flag is clear then add the relative displacement to the program counter to cause a branch to a new location.
 func BPL(cpu *CPU, value uint16) {
-	cpu.CYCSpecial = 0;
+    cpu.CYCSpecial = 0;
 
-        var oldpc uint16
-	if (FlagN(cpu)) == 0 {
-		oldpc = cpu.PC
-		cpu.PC += value
-		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
-			cpu.CYCSpecial+=2
-                } else { cpu.CYCSpecial++ }
-	} 
-        
-           cpu.PC+=2 
+    if (FlagN(cpu)) == 0 {
+        Branch(cpu, value)
+        return
+    }
+    cpu.PC += 2
 }
 
 
@@ -214,35 +186,25 @@ func BRK(cpu *CPU, cart *cartridge.Cartridge) {
 
 // If the overflow flag is clear then add the relative displacement to the program counter to cause a branch to a new location.
 func BVC(cpu *CPU, value uint16) {
-	cpu.CYCSpecial = 0;
+    cpu.CYCSpecial = 0;
 
-        var oldpc uint16
-	if (FlagV(cpu)) == 0 {
-		oldpc = cpu.PC
-		cpu.PC += value
-		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
-			cpu.CYCSpecial+=2
-                } else { cpu.CYCSpecial++ }
-	}
-        
-           cpu.PC+=2 
+    if (FlagV(cpu)) == 0 {
+        Branch(cpu, value)
+        return
+    }
+    cpu.PC += 2
 }
 
 
 // If the overflow flag is set then add the relative displacement to the program counter to cause a branch to a new location.
 func BVS(cpu *CPU, value uint16) {
-	cpu.CYCSpecial = 0;
+    cpu.CYCSpecial = 0;
 
-        var oldpc uint16
-	if (FlagV(cpu)) == 1 {
-		oldpc = cpu.PC
-		cpu.PC += value
-		if (oldpc & 0xFF00) != (cpu.PC & 0xFF00) {
-			cpu.CYCSpecial+=2
-                } else { cpu.CYCSpecial++ }
-	}
-        
-           cpu.PC+=2 
+    if (FlagV(cpu)) == 1 {
+        Branch(cpu, value)
+        return
+    }
+    cpu.PC += 2
 }
 
 // This instruction compares the contents of the accumulator with another memory held value and sets the zero and carry flags as appropriate.
