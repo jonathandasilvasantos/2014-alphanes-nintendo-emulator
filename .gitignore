@@ -87,4 +87,5 @@ doc/codelab/wiki/*.bin
 /testroms/
 /cputest/
 /refs/
+/homebrew/
 alphanes
