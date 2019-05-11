@@ -19,7 +19,6 @@ This file is part of Alphanes.
 package cpu
 
 import "zerojnt/cartridge"
-import "fmt"
 
 //This instruction adds the contents of a memory location to the accumulator together with the carry bit. If overflow occurs the carry bit is set, this enables multiple byte addition to be performed.
 func iADC (cpu *CPU, value uint16) {
@@ -180,7 +179,6 @@ func BRK(cpu *CPU, cart *cartridge.Cartridge) {
 	PushMemory (cpu, cpu.P)
 	cpu.PC = LE( RM(cpu, cart, 0xFFFE), RM(cpu, cart, 0xFFFF))
 	SetB(cpu, 1)
-        fmt.Printf("Break\n\n\n")
 }
 
 
@@ -460,14 +458,12 @@ func ROL (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
 
 // Move each of the bits in either A or M one place to the right. Bit 7 is filled with the current value of the carry flag whilst the old bit 0 becomes the new carry flag value.
 func ROR (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
-    //fmt.Printf("%x = ", value)
 
     switch(op) {
 
     case 0x66:
 
         var result uint16 = uint16(RM(cpu, cart, value))
-    //fmt.Printf("%X\n", result)
         tmp := (result & 0x1)
         result = (result >> 1) | (uint16(FlagC(cpu)) << 7)
         SetC(cpu, byte(tmp))
@@ -491,8 +487,6 @@ func ROR (cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
 func RTI(cpu *CPU) {
 
         SetP(cpu, PopMemory(cpu))
-
-
 	cpu.PC = PopWord(cpu)
 }
 
