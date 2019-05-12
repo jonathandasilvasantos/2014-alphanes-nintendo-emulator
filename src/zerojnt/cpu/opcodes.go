@@ -29,6 +29,9 @@ func nmi(cpu *CPU, cart *cartridge.Cartridge) {
 	cpu.PC = LE(RM(cpu, cart, 0xFFFA), RM(cpu, cart, 0xFFFB))
 	SetI(cpu, 1)
 	cpu.CYC = 7
+	cpu.IO.VRAM_ADDRESS = 0
+	cpu.IO.PPU_MEMORY_STEP = 0
+
 }
 
 func emulate (cpu *CPU, cart *cartridge.Cartridge) {
