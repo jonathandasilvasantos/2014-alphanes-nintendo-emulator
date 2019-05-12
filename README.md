@@ -9,5 +9,5 @@ DWIP
 *	It supports Mapper 0 only
 *	It has a very basic PPU implementation.
 
-![Screenshot of NES ROM DEMO running on Alphanes](https://github.com/jonathandasilvasantos/2014-alphanes-nintendo-emulator/raw/master/screenshot/screenshot.png)
+![Screenshot of DONKEY KONG running on Alphanes](https://github.com/jonathandasilvasantos/2014-alphanes-nintendo-emulator/raw/master/screenshot/screenshot.png)
 
