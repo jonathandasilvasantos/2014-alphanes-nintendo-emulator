@@ -30,6 +30,8 @@ func nmi(cpu *CPU, cart *cartridge.Cartridge) {
 	SetI(cpu, 1)
 	cpu.IO.PPUSTATUS.WRITTEN =0
 	cpu.CYC = 7
+	cpu.IO.PPU_MEMORY_STEP = 0
+        cpu.IO.VRAM_ADDRESS = 0
 }
 
 func emulate (cpu *CPU, cart *cartridge.Cartridge) {

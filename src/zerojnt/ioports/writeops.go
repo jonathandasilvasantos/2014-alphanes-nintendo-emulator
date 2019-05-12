@@ -155,7 +155,7 @@ func WRITE_PPUADDR(IO *IOPorts, value byte) {
 		IO.PPU_MEMORY_STEP = 1
 	} else {
 		// Record the Higher Byte
-		IO.PPU_MEMORY_LOWER = (value << 2) >> 2
+		IO.PPU_MEMORY_LOWER = value
 		IO.PPU_MEMORY_STEP = 0
 		IO.VRAM_ADDRESS = LE(IO.PPU_MEMORY_LOWER, IO.PPU_MEMORY_HIGHER)
 	}
