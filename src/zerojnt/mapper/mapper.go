@@ -110,8 +110,8 @@ func PPU(cart *cartridge.Cartridge, addr uint16) uint16 {
 		return 0x3F00 + (addr%32)
 	}
 	
-	//if (addr >= 0x4000) {
-		//addr = addr % 0x4000
-	//}
+	if (addr >= 0x4000) {
+		return PPU(cart, addr % 0x4000)
+	}
 	return addr
 }
