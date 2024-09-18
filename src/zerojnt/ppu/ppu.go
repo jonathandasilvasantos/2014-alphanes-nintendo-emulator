@@ -1,5 +1,5 @@
 /*
-Copyright 2014, 2014 Jonathan da Silva SAntos
+Copyright 2014, 2014 Jonathan da Silva Santos
 
 This file is part of Alphanes.
 
@@ -18,493 +18,397 @@ This file is part of Alphanes.
 */
 package ppu
 
-import "fmt"
-import "zerojnt/cartridge"
-import "zerojnt/ioports"
-import "zerojnt/debug"
-import "os"
-import "os/exec"
+import (
+    "fmt"
+    "os"
+    "zerojnt/cartridge"
+    "zerojnt/debug"
+    "zerojnt/ioports"
 
-import "github.com/veandco/go-sdl2/sdl"
+    "github.com/veandco/go-sdl2/sdl"
+)
 
 var tx uint16 = 0
 var ty uint16 = 0
 
-
 type PPU struct {
+    SCREEN_DATA []int
 
-	SCREEN_DATA []int
-	
-	Name string
-	CYC int		
-	SCANLINE int
-        D *debug.PPUDebug
-	
-	
-	
-	
-	
-	ATTR byte
-	HIGH_TILE byte
-	LOW_TILE byte
-	
-	
-	VISIBLE_SCANLINE bool
-	
-	
-	IO *ioports.IOPorts
-	
-	
+    Name string
+    CYC  int
+    SCANLINE int
+    D    *debug.PPUDebug
+
+    ATTR      byte
+    HIGH_TILE byte
+    LOW_TILE  byte
+
+    VISIBLE_SCANLINE bool
+
+    IO *ioports.IOPorts
 }
 
 var window *sdl.Window
 var renderer *sdl.Renderer
-var colors = rgb()
+var colors = rgb() // Assume rgb() is defined elsewhere
 
 func StartPPU(IO *ioports.IOPorts) PPU {
-	var ppu PPU
-	ppu.Name = "RICOH RP-2C02\n"
-	fmt.Printf("Started PPU")
-	fmt.Printf(ppu.Name)
-	initCanvas()
-	
-	
+    var ppu PPU
+    ppu.Name = "RICOH RP-2C02\n"
+    fmt.Printf("Started PPU")
+    fmt.Printf(ppu.Name)
+    initCanvas()
 
+    ppu.CYC = 0
+    ppu.SCANLINE = -1 // Corrected initialization
+    ppu.IO = IO
 
-	
+    ppu.SCREEN_DATA = make([]int, 256*240) // Corrected size
 
-
-
-	
-	
-	ppu.CYC = 0
-	ppu.SCANLINE = 241
-	ppu.IO = IO
-	
-	ppu.SCREEN_DATA = make([]int, 61441)
-		
-	return ppu
+    return ppu
 }
 
 func checkVisibleScanline(ppu *PPU) {
-
-	if ppu.SCANLINE >= 0 || ppu.SCANLINE < 240 {
-		ppu.VISIBLE_SCANLINE = true
-	} else {
-		ppu.VISIBLE_SCANLINE = false
-	}
-
+    if ppu.SCANLINE >= 0 && ppu.SCANLINE < 240 {
+        ppu.VISIBLE_SCANLINE = true
+    } else {
+        ppu.VISIBLE_SCANLINE = false
+    }
 }
 
 func checkKeyboard() {
-for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-			switch event.(type) {
-			case *sdl.QuitEvent:
-				println("Quit")
-				os.Exit(0)
-				break
-			}
-		}
+    for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+        switch event.(type) {
+        case *sdl.QuitEvent:
+            println("Quit")
+            os.Exit(0)
+        }
+    }
 }
-
 
 func Process(ppu *PPU, cart *cartridge.Cartridge) {
+    checkVisibleScanline(ppu)
 
+    if ppu.VISIBLE_SCANLINE {
+        var x uint16 = uint16(ppu.CYC % 256)
+        var y uint16 = uint16(ppu.SCANLINE % 240)
+        checkSprite0Bit(ppu, x, y)
+    }
 
+    if (ppu.SCANLINE < 0) && (ppu.CYC <= 0) {
+        ppu.SCANLINE = 0
+        ppu.CYC = 0
+        return
+    }
 
-	checkVisibleScanline(ppu)
-	
-	if (ppu.VISIBLE_SCANLINE) {
-	
-		var x uint16 = uint16(ppu.CYC%256)
-		var y uint16 = uint16(ppu.SCANLINE%240)	
-		checkSprite0Bit(ppu, x, y)
-	}
-	
+    if ppu.CYC >= 0 && ppu.CYC < 256 && ppu.VISIBLE_SCANLINE {
+        // Rendering code can be added here if needed
+    }
 
-	
-	if (ppu.SCANLINE < 0) && (ppu.CYC <= 0) {
-		ppu.SCANLINE = 0
-		ppu.CYC = 0
-		return
-	}
-	
-	if ppu.CYC >= 0 && ppu.CYC < 256 && ppu.VISIBLE_SCANLINE {
-	}
-	
-	
-	
+    if ppu.IO.PPUSTATUS.NMI_OCCURRED == true && ppu.IO.PPUCTRL.GEN_NMI == true {
+        ioports.SetNMI(ppu.IO)
+        ppu.IO.PPUSTATUS.NMI_OCCURRED = false
+    }
 
+    ppu.CYC = ppu.CYC + 1
+    if ppu.CYC > 340 { // Corrected cycle count
+        ppu.CYC = 0
+        ppu.SCANLINE = ppu.SCANLINE + 1
 
-	
-		if ppu.IO.PPUSTATUS.NMI_OCCURRED == true && ppu.IO.PPUCTRL.GEN_NMI == true {
-		    ioports.SetNMI(ppu.IO)
-                    ppu.IO.PPUSTATUS.NMI_OCCURRED = false
-		}
-					
-	ppu.CYC = ppu.CYC + 1
-	if ppu.CYC > 341 {
-		
-		ppu.CYC = 0
-		ppu.SCANLINE = ppu.SCANLINE + 1
-		
-		
-		if ppu.SCANLINE == 241 && ppu.CYC == 0 {
-			SetVBLANK(ppu)
+        if ppu.SCANLINE == 241 && ppu.CYC == 0 {
+            SetVBLANK(ppu)
+            checkKeyboard()
+            handleBackground(ppu)
+            handleSprite(ppu)
+            ShowScreen(ppu)
+        }
 
-	checkKeyboard()
-		        handleBackground(ppu)
-		        handleSprite(ppu)
-			ShowScreen(ppu)
-		}
-		
-		if ppu.SCANLINE == 261 {
-			ClearVBLANK(ppu)
-		}
-		
-		if ppu.SCANLINE > 261 {			
-			ppu.SCANLINE = -1
-		}
-		
-				
-	}
+        if ppu.SCANLINE == 261 && ppu.CYC == 0 {
+            ClearVBLANK(ppu)
+        }
+
+        if ppu.SCANLINE >= 262 {
+            ppu.SCANLINE = -1
+        }
+    }
 }
-	
-	func SetVBLANK(ppu *PPU) {
-		ppu.IO.PPUSTATUS.VBLANK = true
-		ppu.IO.PPUSTATUS.NMI_OCCURRED = true
-	}
 
-	
+func SetVBLANK(ppu *PPU) {
+    ppu.IO.PPUSTATUS.VBLANK = true
+    ppu.IO.PPUSTATUS.NMI_OCCURRED = true
+}
+
 func ClearVBLANK(ppu *PPU) {
-		ppu.IO.PPUSTATUS.VBLANK = false
-		ppu.IO.PPUSTATUS.NMI_OCCURRED = false
-	}
-	
-
-
+    ppu.IO.PPUSTATUS.VBLANK = false
+    ppu.IO.PPUSTATUS.NMI_OCCURRED = false
+    ppu.IO.PPUSTATUS.SPRITE_0_BIT = false
+}
 
 func initCanvas() {
+    var winTitle string = "Alphanes"
 
-	var winTitle string = "Alphanes"
-	var winWidth, winHeight int32 = 256, 240
+    if err := sdl.Init(sdl.INIT_VIDEO); err != nil {
+        fmt.Fprintf(os.Stderr, "Failed to initialize SDL: %s\n", err)
+        os.Exit(1)
+    }
 
-	
+    window, err := sdl.CreateWindow(winTitle, sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
+        0, 0, sdl.WINDOW_FULLSCREEN_DESKTOP)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Failed to create window: %s\n", err)
+        os.Exit(1)
+    }
 
-	window, err := sdl.CreateWindow(winTitle, sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
-		winWidth, winHeight, sdl.WINDOW_SHOWN)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create window: %s\n", err)
-		return
-	}
-	renderer, err = sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create renderer: %s\n", err)
-		return
-	}
-//	defer renderer.Destroy()
+    renderer, err = sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Failed to create renderer: %s\n", err)
+        os.Exit(1)
+    }
+
+    renderer.SetLogicalSize(256, 240)
 }
 
 func attrTable(ppu *PPU) [8][8]byte {
     var result [8][8]byte
-    
-    for x := 0; x < 8; x++ {
-        for y := 0; y < 8; y++ {
-	    var addr = ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + 0x3C0
-            addr = addr + uint16(x + (y*8))
-        result[x][y] = ReadPPURam(ppu, addr)
+
+    for y := 0; y < 8; y++ {
+        for x := 0; x < 8; x++ {
+            var addr = ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + 0x3C0
+            addr = addr + uint16(y*8+x)
+            result[y][x] = ReadPPURam(ppu, addr)
         }
     }
     return result
 }
 
 func palForBackground(attr [8][8]byte, x uint16, y uint16) byte {
+    attr_x := x / 4
+    attr_y := y / 4
 
-    grid := attr[x/8][y/8]
+    grid := attr[attr_y][attr_x]
 
-    bottomright := (grid >> 6)
-    bottomleft := (grid << 2) >> 6
-    topright := (grid << 4) >> 6
-    topleft := (grid << 6) >> 6
+    sub_x := (x / 2) % 2
+    sub_y := (y / 2) % 2
 
-    if (x%8 >= 4) && (y%8 < 4) { return topright }
-    if (x%8 < 4) && (y%8 >= 4) { return bottomleft }
-    if (x%8 < 4) && (y%8 < 4) { return topleft }
-    return bottomright
+    shift := (sub_y*2 + sub_x) * 2
+    pal := (grid >> shift) & 0x03
+
+    return pal
 }
 
-
-
 func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
+    var result [8][8]byte
 
+    addr := base_addr + uint16(index)*16
 
-	var result [8][8]byte
-	
-		
+    for y := 0; y < 8; y++ {
+        tile_addr := addr + uint16(y)
+        tile_addr_b := tile_addr + 8
 
-	
-	for y := 0; y < 8; y++ {
-	
-	var addr uint16 = base_addr + uint16( uint16(index) * 16)
+        var a byte = ReadPPURam(ppu, tile_addr)
+        var b byte = ReadPPURam(ppu, tile_addr_b)
 
-	tile_addr := addr + uint16(y)
-	tile_addr_b :=  tile_addr+8
-			
-			
-			
-			
-			var a byte = ReadPPURam(ppu,  tile_addr)
-			var b byte = ReadPPURam(ppu, tile_addr_b )
-			
-			for x := 0; x < 8; x++ {
-				xa := ReadBit(a, byte(x))
-				xb := ReadBit(b, byte(x))
-                                result[x][y] = xa+xb
-		    }
-	}
-	
-	return result
+        for x := 0; x < 8; x++ {
+            bit0 := (a >> (7 - x)) & 1
+            bit1 := (b >> (7 - x)) & 1
+            result[y][x] = (bit1 << 1) | bit0
+        }
+    }
+
+    return result
 }
 
 func fetchNametable(ppu *PPU, x uint16, y uint16) byte {
-
- 
-	absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (x+ (y*32)  )
-	return  ReadPPURam(ppu, absolute_addr)
-	
+    absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (y * 32) + x
+    return ReadPPURam(ppu, absolute_addr)
 }
-
-
 
 func drawBGTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {
+    tile := fetchTile(ppu, index, base_addr)
 
+    wx := x / 8
+    wy := y / 8
+    attrpal := attrTable(ppu)
+    pal := palForBackground(attrpal, wx, wy)
 
-	tile := fetchTile(ppu, index, base_addr)
+    for ky := 0; ky < 8; ky++ {
+        for kx := 0; kx < 8; kx++ {
+            var ox int = int(x) + kx
+            var oy int = int(y) + ky
 
-        // Getting palette values
-        wx := uint16(x/16)
-        wy := uint16(y/16)
-        attrpal := attrTable(ppu)
-        pal := palForBackground(attrpal, wx, wy)
+            if flipX {
+                ox = int(x) + (7 - kx)
+            }
+            if flipY {
+                oy = int(y) + (7 - ky)
+            }
 
-        //var ca uint16 = 0
-        //var cb uint16 = 1
-        //var cc uint16 = 2
-        //var cd uint16 = 3
+            if oy < 240 && ox < 256 {
+                colorIndex := tile[ky][kx]
+                if ignoreZero && colorIndex == 0 {
+                    continue
+                }
 
-        
+                paletteIndex := uint16(colorIndex) | uint16(pal)<<2
+                colorAddr := uint16(0x3F00) + paletteIndex
+                color := ReadPPURam(ppu, colorAddr)
 
+                if colorIndex == 0 {
+                    color = ReadPPURam(ppu, 0x3F00)
+                }
 
-
-	
-	for ky := 0; ky < 8; ky++ {
-		for kx := 0; kx < 8; kx++ {
-		
-			
-			var ox int = int(x) + kx
-			
-			if (flipX == true) {
-				ox = (int(x) + 8) - kx
-			}
-			
-			var oy int = int(y) + ky
-			
-
-
-                            if oy < 240 {
-                                
-                color := uint16(tile[kx][ky] + (pal*4) + 1)
-                var coloraddr = uint16(0x3F00+color)
-                color = uint16(ReadPPURam(ppu, coloraddr))
-                    if tile[kx][ky] == 0 { color = uint16(ppu.IO.PPU_RAM[0x3F00]) }
-                    
-
-			        WRITE_SCREEN(ppu, ox, oy, int(color) )
-                            }
-			
-		
-		}
-	}
-	
-
+                WRITE_SCREEN(ppu, ox, oy, int(color))
+            }
+        }
+    }
 }
-
 
 func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, attr byte) {
+    tile := fetchTile(ppu, index, base_addr)
+    pal := attr & 0x03
 
+    for ky := 0; ky < 8; ky++ {
+        for kx := 0; kx < 8; kx++ {
+            var ox int = int(x) + kx
+            var oy int = int(y) + ky
 
-	        tile := fetchTile(ppu, index, base_addr)
-	
-	for ky := 0; ky < 8; ky++ {
-		for kx := 0; kx < 8; kx++ {
-		
-			
-			var ox int = int(x) + kx
-			
-			if (flipX == true) {
-				ox = (int(x) + 8) - kx
-			}
-			
-			var oy int = int(y) + ky
-			
+            if flipX {
+                ox = int(x) + (7 - kx)
+            }
+            if flipY {
+                oy = int(y) + (7 - ky)
+            }
 
+            if oy < 240 && ox < 256 {
+                colorIndex := tile[ky][kx]
+                if colorIndex == 0 {
+                    continue
+                }
 
-                            if oy < 240 {
-                            pal := uint16(((attr << 6) >> 6))
-                            coloraddr := uint16( 0x3F10 + (pal*4 + 1) )
-                color := ReadPPURam(ppu, coloraddr + uint16(tile[kx][ky]) )
-                if tile[kx][ky] == 0 { color = 0 }
+                colorAddr := uint16(0x3F10) + uint16(pal)*4 + uint16(colorIndex)
+                color := ReadPPURam(ppu, colorAddr)
 
-
-			        WRITE_SCREEN(ppu, ox, oy, int(color) )
-                            }
-			
-		
-		}
-	}
-	
-
+                WRITE_SCREEN(ppu, ox, oy, int(color))
+            }
+        }
+    }
 }
 
-
 func ShowScreen(ppu *PPU) {
+    renderer.SetDrawColor(0, 0, 0, 255)
+    renderer.Clear()
 
-			renderer.SetDrawColor(0,0,0,255)
-			renderer.Clear()
+    for y := 0; y < 240; y++ {
+        for x := 0; x < 256; x++ {
+            c := READ_SCREEN(ppu, x, y)
+            renderer.SetDrawColor(colors[c][0], colors[c][1], colors[c][2], 255)
+            if c == 0 {
+                renderer.SetDrawColor(0, 0, 0, 255)
+            }
 
-	for x:=0; x<256; x++ {
-		for y:=0; y<240; y++ {
-			c := READ_SCREEN(ppu, x, y)
-			
-
-	    renderer.SetDrawColor(colors[c][0], colors[c][1], colors[c][2], 255)
-		    if c == 0 { renderer.SetDrawColor(0, 0, 0, 255) }
-
-			var ox int32 = int32(x)
-			var oy int32 = int32(y)
-			renderer.DrawPoint(ox, oy)
-			
-		}
-	}
-	renderer.Present()
+            renderer.DrawPoint(int32(x), int32(y))
+        }
+    }
+    renderer.Present()
 }
 
 func READ_SCREEN(ppu *PPU, x int, y int) int {
-	return ppu.SCREEN_DATA[x +(y*256) ]
+    if x >= 256 || y >= 240 || x < 0 || y < 0 {
+        return 0
+    }
+    return ppu.SCREEN_DATA[x+(y*256)]
 }
 
 func WRITE_SCREEN(ppu *PPU, x int, y int, k int) {
-	if x >= 256 || y >= 240 {
-		return
-	}
-	ppu.SCREEN_DATA[x + (y*256) ] = k
-}
-
-func printNametable(ppu *PPU) {
-
-	c := exec.Command("clear")
-	c.Stdout = os.Stdout
-	c.Run()
-
-	for x:= 0; x < 32; x++ {
-		for y:= 0; y < 32; y++ {
-		}
-	}
-
+    if x >= 256 || y >= 240 || x < 0 || y < 0 {
+        return
+    }
+    ppu.SCREEN_DATA[x+(y*256)] = k
 }
 
 func handleBackground(ppu *PPU) {
-
-    if ppu.IO.PPUMASK.SHOW_BACKGROUND == false {
+    if !ppu.IO.PPUMASK.SHOW_BACKGROUND {
         return
     }
 
-    for lx :=0; lx < 32; lx++ {
-        for ly :=0; ly < 30; ly++ {
-        y := uint16(ly)
-        x := uint16(lx)
+    for ly := 0; ly < 30; ly++ {
+        for lx := 0; lx < 32; lx++ {
+            x := uint16(lx)
+            y := uint16(ly)
 
-		tileid := fetchNametable(ppu, x, y)
-	drawBGTile(ppu,
-                    x*8,
-                    y*8,
-                    tileid,
-                    ppu.IO.PPUCTRL.BACKGROUND_ADDR,
-                    false,
-                    false,
-                    false)
+            tileid := fetchNametable(ppu, x, y)
+            drawBGTile(ppu,
+                x*8,
+                y*8,
+                tileid,
+                ppu.IO.PPUCTRL.BACKGROUND_ADDR,
+                false,
+                false,
+                false)
+        }
     }
-}
 }
 
 func handleSprite(ppu *PPU) {
-
-    if ppu.IO.PPUMASK.SHOW_SPRITE == false {
+    if !ppu.IO.PPUMASK.SHOW_SPRITE {
         return
     }
 
-				for s := 0; s<256; s+=4 {
-					pos_y := uint16( ppu.IO.PPU_OAM[s] )
-					attr := ppu.IO.PPU_OAM[s+2]
-					pos_x := uint16( ppu.IO.PPU_OAM[s+3] )
-					ind := ppu.IO.PPU_OAM[s+1]
-					
-					
-					var flipX bool = false
-					var flipY bool = false
-					
-					if (attr << 7) >> 7 == 1 {
-						flipY = true
-					}
-					
-					if (attr << 6) >> 7 == 1 {
-						flipX = true
-					}
-					
+    for s := 0; s < 256; s += 4 {
+        pos_y := uint16(ppu.IO.PPU_OAM[s]) + 1 // Sprites are delayed by one scanline
+        ind := ppu.IO.PPU_OAM[s+1]
+        attr := ppu.IO.PPU_OAM[s+2]
+        pos_x := uint16(ppu.IO.PPU_OAM[s+3])
 
+        flipX := attr&0x40 != 0
+        flipY := attr&0x80 != 0
 
-
-					drawTile(ppu, 
-                                            pos_x,
-                                            pos_y,
-                                            ind,
-                                            ppu.IO.PPUCTRL.SPRITE_8_ADDR,
-                                            flipX,
-                                            flipY,
-                                            attr)
-
-					
-				} 
+        drawTile(ppu,
+            pos_x,
+            pos_y,
+            ind,
+            ppu.IO.PPUCTRL.SPRITE_8_ADDR,
+            flipX,
+            flipY,
+            attr)
+    }
 }
 
 func checkSprite0Bit(ppu *PPU, x uint16, y uint16) {
+    if ppu.IO.PPUSTATUS.SPRITE_0_BIT {
+        return
+    }
 
-if(ppu.IO.PPUSTATUS.SPRITE_0_BIT == true) { return }
+    pos_y := uint16(ppu.IO.PPU_OAM[0]) + 1 // Sprites are delayed by one scanline
+    ind := ppu.IO.PPU_OAM[1]
+    attr := ppu.IO.PPU_OAM[2]
+    pos_x := uint16(ppu.IO.PPU_OAM[3])
 
-	pos_y := uint16( ppu.IO.PPU_OAM[0])
-	pos_x := uint16( ppu.IO.PPU_OAM[3] )
-	ind := ppu.IO.PPU_OAM[1]
-	
-	matchVertical := pos_y >= y && (pos_y+8) <= y
-	matchHorizontal := pos_x >= y && (pos_x+8) <= x
-	
-	
-	if matchVertical == false || matchHorizontal == false { return }
-	fmt.Printf("match!\n")
-	
-	deltaX := pos_x - x
-	deltaY := pos_y - y
-	
-	sprite_tile := fetchTile(ppu, ind,  ppu.IO.PPUCTRL.SPRITE_8_ADDR )
-	fetchNametable(ppu, x/8, y/8)
-	bg_tile := fetchTile(ppu, ind,  ppu.IO.PPUCTRL.BACKGROUND_ADDR )
-	
-	if sprite_tile[deltaX][deltaY] != 0 && bg_tile[x%8][y%8] != 0 {
-		ppu.IO.PPUSTATUS.SPRITE_0_BIT = true
-		fmt.Printf("Sprite zero!\n")
-	}
-	
-	
-	
+    flipX := attr&0x40 != 0
+    flipY := attr&0x80 != 0
 
+    if y < pos_y || y >= pos_y+8 || x < pos_x || x >= pos_x+8 {
+        return
+    }
+
+    deltaX := x - pos_x
+    deltaY := y - pos_y
+
+    if flipX {
+        deltaX = 7 - deltaX
+    }
+    if flipY {
+        deltaY = 7 - deltaY
+    }
+
+    sprite_tile := fetchTile(ppu, ind, ppu.IO.PPUCTRL.SPRITE_8_ADDR)
+    bg_tile_index := fetchNametable(ppu, x/8, y/8)
+    bg_tile := fetchTile(ppu, bg_tile_index, ppu.IO.PPUCTRL.BACKGROUND_ADDR)
+
+    sprite_pixel := sprite_tile[deltaY][deltaX]
+    bg_pixel := bg_tile[y%8][x%8]
+
+    if sprite_pixel != 0 && bg_pixel != 0 {
+        ppu.IO.PPUSTATUS.SPRITE_0_BIT = true
+    }
 }
