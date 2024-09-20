@@ -81,7 +81,7 @@ func SetBit(input byte, pos byte, value byte ) byte {
 }
 
 func LE(a byte, b byte) uint16 {
-	var x uint16 = uint16(a)
-	var y uint16 = uint16(b)
-	return (y << 8) | x	
+    var x uint16 = uint16(a)
+    var y uint16 = uint16(b)
+    return (y << 8) | x
 }

@@ -146,18 +146,18 @@ func WRITE_PPUSCROLL(IO *IOPorts, value byte) {
 }
 
 func WRITE_PPUADDR(IO *IOPorts, value byte) {
-
-	if IO.PPU_MEMORY_STEP == 0 {
-		// Records the lower byte
-		IO.PPU_MEMORY_HIGHER = value
-		IO.PPU_MEMORY_STEP = 1
-	} else {
-		// Record the Higher Byte
-		IO.PPU_MEMORY_LOWER = value
-		IO.PPU_MEMORY_STEP = 0
-		IO.VRAM_ADDRESS = LE(IO.PPU_MEMORY_LOWER, IO.PPU_MEMORY_HIGHER)
-	}
+    if IO.PPU_MEMORY_STEP == 0 {
+       // Records the higher byte
+       IO.PPU_MEMORY_HIGHER = value
+        IO.PPU_MEMORY_STEP = 1
+    } else {
+       // Record the lower byte
+       IO.PPU_MEMORY_LOWER = value
+        IO.PPU_MEMORY_STEP = 0
+        IO.VRAM_ADDRESS = LE(IO.PPU_MEMORY_LOWER, IO.PPU_MEMORY_HIGHER)
+    }
 }
+
 
 func WRITE_PPUDATA(IO *IOPorts, cart *cartridge.Cartridge, value byte) {
 	

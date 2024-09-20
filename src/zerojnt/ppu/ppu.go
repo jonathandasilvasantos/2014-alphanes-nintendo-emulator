@@ -186,20 +186,40 @@ func attrTable(ppu *PPU) [8][8]byte {
     return result
 }
 
-func palForBackground(attr [8][8]byte, x int, y int) byte {
-    attr_x := ((x / 4) % 8 + 8) % 8
-    attr_y := ((y / 4) % 8 + 8) % 8
+func palForBackground(ppu *PPU, x int, y int) byte {
+    attr_byte := fetchAttributeByte(ppu, uint16(x), uint16(y))
 
-    grid := attr[attr_y][attr_x]
+    tile_x := x % 32
+    tile_y := y % 30
 
-    sub_x := ((x / 2) % 2 + 2) % 2
-    sub_y := ((y / 2) % 2 + 2) % 2
+    shift := uint(0)
+    if (tile_y % 4) >= 2 {
+        shift += 4
+    }
+    if (tile_x % 4) >= 2 {
+        shift += 2
+    }
 
-    shift := (sub_y*2 + sub_x) * 2
-    pal := (grid >> shift) & 0x03
+    pal := (attr_byte >> shift) & 0x03
 
     return pal
 }
+
+func fetchAttributeByte(ppu *PPU, x uint16, y uint16) byte {
+    nametable_x := (x / 32) % 2  // 0 or 1
+    nametable_y := (y / 30) % 2  // 0 or 1
+
+    nametable_base := uint16(0x2000) + uint16(nametable_y*2+nametable_x)*0x400
+
+    tile_x := x % 32
+    tile_y := y % 30
+
+    attribute_table_addr := nametable_base + 0x3C0 + (tile_y/4)*8 + (tile_x/4)
+
+    return ReadPPURam(ppu, attribute_table_addr)
+}
+
+
 
 func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
     var result [8][8]byte
@@ -224,20 +244,26 @@ func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 }
 
 func fetchNametable(ppu *PPU, x uint16, y uint16) byte {
-    x = x % 32
-    y = y % 30
-    absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (y * 32) + x
+    x = x % 64  // 64 tiles horizontally (512 pixels / 8 pixels per tile)
+    y = y % 60  // 60 tiles vertically (480 pixels / 8 pixels per tile)
+
+    nametable_x := (x / 32) % 2  // 0 or 1
+    nametable_y := (y / 30) % 2  // 0 or 1
+
+    nametable_base := uint16(0x2000) + uint16(nametable_y*2+nametable_x)*0x400
+
+    tile_x := x % 32
+    tile_y := y % 30
+
+    absolute_addr := nametable_base + tile_y*32 + tile_x
+
     return ReadPPURam(ppu, absolute_addr)
 }
 
-func drawBGTile(ppu *PPU, x int, y int, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {
+func drawBGTile(ppu *PPU, x int, y int, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool, tileX int, tileY int) {
     tile := fetchTile(ppu, index, base_addr)
 
-    wx := ((x / 8) % 32 + 32) % 32
-    wy := ((y / 8) % 30 + 30) % 30
-
-    attrpal := attrTable(ppu)
-    pal := palForBackground(attrpal, wx*8, wy*8)
+    pal := palForBackground(ppu, tileX, tileY)
 
     for ky := 0; ky < 8; ky++ {
         for kx := 0; kx < 8; kx++ {
@@ -362,15 +388,12 @@ func handleBackground(ppu *PPU) {
     scrollX := int(ppu.IO.PPUSCROLL.X)
     scrollY := int(ppu.IO.PPUSCROLL.Y)
 
-    for tileY := 0; tileY < 30; tileY++ {
-        for tileX := 0; tileX <= 32; tileX++ {
-            //scrolledX := (tileX*8 - (scrollX % 256)) % 512
-            //scrolledY := (tileY*8 - (scrollY % 240)) % 480
+    for tileY := -1; tileY < 30+1; tileY++ {
+        for tileX := -1; tileX < 32+1; tileX++ {
+            tileX_global := (scrollX/8 + tileX) % 64
+            tileY_global := (scrollY/8 + tileY) % 60
 
-            nametableTileX := (scrollX/8 + tileX) % 32
-            nametableTileY := (scrollY/8 + tileY) % 30
-
-            tileid := fetchNametable(ppu, uint16(nametableTileX), uint16(nametableTileY))
+            tileid := fetchNametable(ppu, uint16(tileX_global), uint16(tileY_global))
 
             screenX := (tileX*8 - (scrollX % 8))
             screenY := (tileY*8 - (scrollY % 8))
@@ -382,10 +405,13 @@ func handleBackground(ppu *PPU) {
                 ppu.IO.PPUCTRL.BACKGROUND_ADDR,
                 false,
                 false,
-                false)
+                false,
+                tileX_global,
+                tileY_global)
         }
     }
 }
+
 
 func handleSprite(ppu *PPU) {
     if !ppu.IO.PPUMASK.SHOW_SPRITE {
