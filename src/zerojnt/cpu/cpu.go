@@ -75,6 +75,8 @@ func ResetCPU(cpu *CPU) {
 
 func SetResetVector (cpu *CPU, cart *cartridge.Cartridge) {
 	cpu.PC = LE( RM(cpu, cart, 0xFFFC), RM(cpu, cart, 0xFFFD) )
+
+	//cpu.PC = 0xC000
 }
 
 func Process(cpu *CPU, cart *cartridge.Cartridge) {

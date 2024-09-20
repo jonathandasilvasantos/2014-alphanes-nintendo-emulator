@@ -22,17 +22,39 @@ import "zerojnt/cartridge"
 import "fmt"
 
 func nmi(cpu *CPU, cart *cartridge.Cartridge) {
-	
+    // 1. Push the current Program Counter (PC) onto the stack.
+    //    The PC should point to the next instruction to execute after returning from the NMI.
+    PushWord(cpu, cpu.PC)
 
-        PushWord(cpu, cpu.lastPC)
-	PushMemory (cpu, cpu.P)
-	cpu.PC = LE(RM(cpu, cart, 0xFFFA), RM(cpu, cart, 0xFFFB))
-	SetI(cpu, 1)
-	cpu.IO.PPUSTATUS.WRITTEN =0
-	cpu.CYC = 7
-	cpu.IO.PPU_MEMORY_STEP = 0
-        cpu.IO.VRAM_ADDRESS = 0
+    // 2. Push the Processor Status Register (P) onto the stack.
+    //    This saves the current state of the processor flags.
+    PushMemory(cpu, cpu.P)
+
+    // 3. Set the Program Counter (PC) to the NMI vector located at $FFFA/B.
+    //    This tells the CPU where to jump to handle the NMI.
+    nmiVectorLow := RM(cpu, cart, 0xFFFA)
+    nmiVectorHigh := RM(cpu, cart, 0xFFFB)
+    cpu.PC = LE(nmiVectorLow, nmiVectorHigh)
+
+    // 4. Set the Interrupt Disable Flag (I) to prevent further IRQs.
+    //    NMIs are non-maskable and will still occur regardless of this flag.
+    SetI(cpu, 1)
+
+    // 5. Reset specific PPU status flags and variables as needed.
+    //    Ensure these resets align with NES hardware behavior.
+    cpu.IO.PPUSTATUS.WRITTEN = 0
+    cpu.IO.PPU_MEMORY_STEP = 0
+    cpu.IO.VRAM_ADDRESS = 0
+
+    // 6. Set the CPU cycle count to reflect the time taken to handle the NMI.
+    //    The NES CPU takes 7 cycles to process an NMI.
+    cpu.CYC = 7
+
+    // 7. (Optional) Log or debug information for verification.
+    //    Uncomment the following line if you want to see when an NMI is triggered.
+    // fmt.Println("NMI triggered and handled.")
 }
+
 
 func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 
@@ -48,8 +70,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 	
 
 
+		
 
         op := RM(cpu, cart, cpu.PC)
+
+
+
         if (cpu.D.Enable) && (cpu.SwitchTimes > 8000) {
             if op != DebugOp(cpu, cart) {
                 if DebugOp(cpu, cart) == 0x48 {
@@ -112,11 +138,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			break
 
 		
-	case 0x06: // ASL Zp
-		ASL(cpu, cart, Zp(cpu, cart))
-		cpu.CYC = 5
-		cpu.PC = cpu.PC + 2
-		break
+
 
 		
 	case 0x08: // PHP Imp
@@ -137,11 +159,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.PC = cpu.PC + 2
 		break
 		
-	case 0x0A: // ASL Acc
-		ASL(cpu, cart, 0)
-		cpu.CYC = 2
-		cpu.PC = cpu.PC + 1
-		break
+
 		
 		case 0x0C: // Nop - No Operation
 			NOP()
@@ -156,11 +174,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		break
 		
 		
-	case 0x0E: // ASL Abs
-		ASL(cpu, cart, Abs(cpu, cart))
-		cpu.CYC = 6
-		cpu.PC = cpu.PC + 3
-		break
+
 
 
 		
@@ -191,11 +205,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.PC = cpu.PC + 2
 		break
 		
-	case 0x16: // ASL ZpX
-		ASL(cpu, cart, ZpX(cpu, cart))
-		cpu.CYC = 6
-		cpu.PC = cpu.PC + 2
-		break
+
 
 
 		
@@ -236,11 +246,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.PC = cpu.PC + 3
 		break
 
-	case 0x1E: // ASL AbX
-		ASL(cpu, cart, AbsX(cpu, cart))
-		cpu.CYC = 7
-		cpu.PC = cpu.PC + 3
-		break
+
 
 		
 	case 0x24: // Bit Zp
@@ -261,11 +267,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.PC = cpu.PC + 2
 		break
 		
-	case 0x26: // ROL Zp
-		ROL(cpu, cart, Zp(cpu, cart), 0x26)
-		cpu.CYC = 5
-		cpu.PC = cpu.PC + 2
-		break
+
 
 		
 		
@@ -286,11 +288,6 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.PC = cpu.PC + 2
 		break
 		
-	case 0x2A: // ROL Acc
-		ROL(cpu, cart, 0, 0x2A)
-		cpu.CYC = 2
-		cpu.PC = cpu.PC + 1
-		break
 		
 	case 0x2C: // Bit Abs
 		BIT(cpu, cart, Abs(cpu, cart))
@@ -309,11 +306,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.PC = cpu.PC + 3
 		break
 
-	case 0x2E: // ROL Abs
-		ROL(cpu, cart, Abs(cpu, cart), 0x26)
-		cpu.CYC = 6
-		cpu.PC = cpu.PC + 3
-		break
+	
 
 		
 	case 0x30: // BMI Relative
@@ -343,11 +336,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.PC = cpu.PC + 2
 		break
 		
-	case 0x36: // ROL ZpX
-		ROL(cpu, cart, ZpX(cpu, cart), 0x2A)
-		cpu.CYC = 6
-		cpu.PC = cpu.PC + 2
-		break
+
 		
 		case 0x3A: // Nop - No Operation
 			NOP()
@@ -388,12 +377,6 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		}
 		break
 		
-	case 0x3E: // ROL AbX
-		ROL(cpu, cart, AbsX(cpu, cart), 0x3E)
-		cpu.CYC = 7
-		cpu.PC = cpu.PC + 3
-		break
-
 		
 	case 0x41: // EOR IndX
 		EOR(cpu, uint16(RM(cpu, cart, IndX(cpu, cart))))
@@ -414,11 +397,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		cpu.PC = cpu.PC + 2
 		break
 
-	case 0x46: // LSR Zp
-		LSR(cpu, cart, Zp(cpu, cart))
-		cpu.CYC = 5
-		cpu.PC = cpu.PC + 2
-		break
+
 
 		case 0x48: // PHA Imp
 			PHA(cpu)
@@ -437,11 +416,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.CYC = 6
 			break
 			
-		case 0x4A: // LSR Acc
-			LSR(cpu, cart, 0)
-			cpu.CYC = 2
-			cpu.PC = cpu.PC + 1
-			break
+
 		
 		case 0x4C: // JMP Abs
 			JMP(cpu, Abs(cpu, cart))
@@ -454,11 +429,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.PC = cpu.PC + 3
 			break
 
-		case 0x4E: // LSR Abs
-			LSR(cpu, cart, Abs(cpu, cart))
-			cpu.CYC = 6
-			cpu.PC = cpu.PC + 3
-			break
+
 
 			
 		case 0x50: // BVC Relative
@@ -488,12 +459,6 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.PC = cpu.PC + 2
 			break
 			
-		case 0x56: // LSR ZpX
-			LSR(cpu, cart, ZpX(cpu, cart))
-			cpu.CYC = 6
-			cpu.PC = cpu.PC + 2
-			break
-
 			
 		case 0x58: // CLI Imp
 			CLI(cpu)
@@ -532,24 +497,13 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.PC = cpu.PC + 3
 			break
 
-		case 0x5E: // LSR AbX
-			LSR(cpu, cart, AbsX(cpu, cart))
-			cpu.CYC = 7
-			cpu.PC = cpu.PC + 3
-			break
-
-
 			
 		case 0x60: // RTS Imp
 			RTS(cpu)
 			cpu.CYC = 6
 			break
 			
-		case 0x61: // ADC IndX
-			ADC(cpu, uint16(RM(cpu, cart, IndX(cpu, cart))))
-			cpu.CYC = 6
-			cpu.PC = cpu.PC + 2
-			break
+		
 			
 		case 0x64: // Nop - No Operation
 			NOP()
@@ -558,18 +512,6 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			break
 			
 			
-		case 0x65: // ADC Zp
-			ADC(cpu, uint16(RM(cpu, cart, Zp(cpu, cart))))
-			cpu.CYC = 3
-			cpu.PC = cpu.PC + 2
-			break
-			
-		case 0x66: // ROR Zp
-			ROR(cpu, cart, Zp(cpu, cart), 0x66)
-			cpu.CYC = 5
-			cpu.PC = cpu.PC + 2
-			break
-
 
 
 			
@@ -579,17 +521,9 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.PC = cpu.PC + 1
 			break
 			
-		case 0x69: // ADC Imm
-			ADC(cpu, Imm(cpu, cart))
-			cpu.PC = cpu.PC + 2
-			cpu.CYC = 2
-			break
+
 			
-		case 0x6A: // ROR Acc
-			ROR(cpu, cart, 0, 0x6A)
-			cpu.CYC = 2
-			cpu.PC = cpu.PC + 1
-			break
+
 			
 		case 0x6C: // JMP Ind
 			JMP(cpu, Ind(cpu, cart))
@@ -597,34 +531,13 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			break
 
 			
-		case 0x6D: // ADC Abs
-			ADC(cpu, uint16(RM(cpu, cart, Abs(cpu, cart))))
-			cpu.CYC = 4
-			cpu.PC = cpu.PC + 3
-			break
-			
-		case 0x6E: // ROR Abs
-			ROR(cpu, cart, Abs(cpu, cart), 0x66)
-			cpu.CYC = 6
-			cpu.PC = cpu.PC + 3
-			break
-
-
-
 			
 		case 0x70: // BVS Relative
 			BVS(cpu, Rel(cpu, cart))
 			cpu.CYC = 2 + cpu.CYCSpecial
 			break
 			
-		case 0x71: // ADC IndY
-			ADC(cpu, uint16(RM(cpu, cart, IndY(cpu, cart))))
-			cpu.CYC = 5
-			cpu.PC = cpu.PC + 2
-			if cpu.PageCrossed == 1 {
-				cpu.CYC ++
-			}
-			break
+		
 			
 		case 0x74: // Nop - No Operation
 			NOP()
@@ -632,17 +545,9 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.CYC = 2
 			break
 
-		case 0x75: // ADC ZpX
-			ADC(cpu, uint16(RM(cpu, cart, ZpX(cpu, cart))))
-			cpu.CYC = 4
-			cpu.PC = cpu.PC + 2
-			break
+
 			
-		case 0x76: // ROR ZpX
-			ROR(cpu, cart, ZpX(cpu, cart), 0x6A)
-			cpu.CYC = 6
-			cpu.PC = cpu.PC + 2
-			break
+		
 
 			
 		case 0x78: // SEI Imp
@@ -650,15 +555,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.CYC = 2
 			cpu.PC = cpu.PC + 1
 			break
-			
-		case 0x79: // ADC AbsY
-			ADC(cpu, uint16(RM(cpu, cart, AbsY(cpu, cart))))
-			cpu.CYC = 4
-			cpu.PC = cpu.PC + 3
-			if cpu.PageCrossed == 1 {
-				cpu.CYC++
-			}
-			break
+
 			
 		case 0x7A: // Nop - No Operation
 			NOP()
@@ -672,20 +569,6 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.CYC = 2
 			break
 			
-		case 0x7D: // ADC AbX
-			ADC(cpu, uint16(RM(cpu, cart,AbsX(cpu, cart))))
-			cpu.CYC = 4
-			if cpu.PageCrossed == 1 {
-				cpu.CYC++
-			}
-			cpu.PC = cpu.PC + 3
-			break
-
-		case 0x7E: // ROR AbX
-			ROR(cpu, cart, AbsX(cpu, cart), 0x7E)
-			cpu.CYC = 7
-			cpu.PC = cpu.PC + 3
-			break
 			
 		case 0x80: // Nop - No Operation
 			NOP()
@@ -1282,9 +1165,225 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			break
 
 
+    // ASL Zero Page
+    case 0x06: // ASL Zp
+        address := Zp(cpu, cart)          // Calculate Zero Page address
+        ASL_M(cpu, cart, address)        // Perform ASL on memory
+        cpu.CYC = 5                       // Set cycle count for ASL Zp
+        cpu.PC += 2                        // Increment Program Counter by 2 bytes (opcode + operand)
+        break
+
+    // ASL Accumulator
+    case 0x0A: // ASL Acc
+        ASL_A(cpu)                        // Perform ASL on Accumulator
+        cpu.CYC = 2                       // Set cycle count for ASL Acc
+        cpu.PC += 1                        // Increment Program Counter by 1 byte (opcode only)
+        break
+
+    // ASL Absolute
+    case 0x0E: // ASL Abs
+        address := Abs(cpu, cart)         // Calculate Absolute address
+        ASL_M(cpu, cart, address)        // Perform ASL on memory
+        cpu.CYC = 6                       // Set cycle count for ASL Abs
+        cpu.PC += 3                        // Increment Program Counter by 3 bytes (opcode + 2-byte address)
+        break
+
+    // ASL Zero Page,X
+    case 0x16: // ASL ZpX
+        address := ZpX(cpu, cart)         // Calculate Zero Page,X address
+        ASL_M(cpu, cart, address)        // Perform ASL on memory
+        cpu.CYC = 6                       // Set cycle count for ASL ZpX
+        cpu.PC += 2                        // Increment Program Counter by 2 bytes (opcode + operand)
+        break
+
+    // ASL Absolute,X
+    case 0x1E: // ASL AbsX
+        address := AbsX(cpu, cart)         // Calculate Absolute,X address
+        ASL_M(cpu, cart, address)        // Perform ASL on memory
+        cpu.CYC = 7                       // Set cycle count for ASL AbsX
+        cpu.PC += 3                        // Increment Program Counter by 3 bytes (opcode + 2-byte address)
+        break
 
 
-			
+
+    
+
+		case 0x46: // LSR Zero Page
+        LSR_M(cpu, cart, Zp(cpu, cart))
+        cpu.CYC = 5
+        cpu.PC += 2
+        break
+
+    case 0x4A: // LSR Accumulator
+        LSR_A(cpu)
+        cpu.CYC = 2
+        cpu.PC += 1
+        break
+
+    case 0x4E: // LSR Absolute
+        LSR_M(cpu, cart, Abs(cpu, cart))
+        cpu.CYC = 6
+        cpu.PC += 3
+        break
+
+    case 0x56: // LSR Zero Page,X
+        LSR_M(cpu, cart, ZpX(cpu, cart))
+        cpu.CYC = 6
+        cpu.PC += 2
+        break
+
+    
+		case 0x66: // ROR Zp
+        ROR(cpu, cart, Zp(cpu, cart), 0x66)
+        cpu.CYC = 5
+        cpu.PC += 2
+		break
+
+    case 0x6A: // ROR Acc
+        ROR(cpu, cart, 0, 0x6A)
+        cpu.CYC = 2
+        cpu.PC += 1
+		break
+    
+	case 0x6E: // ROR Abs
+        ROR(cpu, cart, Abs(cpu, cart), 0x6E) // Changed from 0x66 to 0x6E
+        cpu.CYC = 6
+        cpu.PC += 3
+		break
+
+    case 0x76: // ROR ZpX
+        ROR(cpu, cart, ZpX(cpu, cart), 0x76) // Changed from 0x6A to 0x76
+        cpu.CYC = 6
+        cpu.PC += 2
+		break
+
+    case 0x7E: // ROR AbX
+        ROR(cpu, cart, AbsX(cpu, cart), 0x7E) // Changed from 0x7E
+        cpu.CYC = 7
+        cpu.PC += 3
+		break
+
+
+    case 0x26: // ROL Zp
+        ROL(cpu, cart, Zp(cpu, cart), 0x26)
+        cpu.CYC = 5
+        cpu.PC += 2
+		break
+
+    case 0x2A: // ROL Acc
+        ROL(cpu, cart, 0, 0x2A)
+        cpu.CYC = 2
+        cpu.PC += 1
+		break
+    
+	case 0x2E: // ROL Abs
+        ROL(cpu, cart, Abs(cpu, cart), 0x2E) // Changed from 0x26 to 0x2E
+        cpu.CYC = 6
+        cpu.PC += 3
+		break
+
+    case 0x36: // ROL ZpX
+        ROL(cpu, cart, ZpX(cpu, cart), 0x36) // Changed from 0x2A to 0x36
+        cpu.CYC = 6
+        cpu.PC += 2
+		break
+    
+	case 0x3E: // ROL AbX
+        ROL(cpu, cart, AbsX(cpu, cart), 0x3E) // Changed from 0x3E
+        cpu.CYC = 7
+        cpu.PC += 3
+		break
+
+
+
+		case 0x61: // ADC (Indirect,X)
+        addr := IndX(cpu, cart)
+        value := RM(cpu, cart, addr)
+        ADC(cpu, value)
+        cpu.CYC = 6
+        cpu.PC += 2
+        break
+
+    case 0x65: // ADC Zero Page
+        addr := Zp(cpu, cart)
+        value := RM(cpu, cart, addr)
+        ADC(cpu, value)
+        cpu.CYC = 3
+        cpu.PC += 2
+        break
+
+		case 0x69: // ADC Immediate
+		value := Imm(cpu, cart)
+		ADC(cpu, byte(value)) // Cast uint16 to byte
+		cpu.CYC = 2
+		cpu.PC += 2
+		break
+
+		
+
+    case 0x6D: // ADC Absolute
+        addr := Abs(cpu, cart)
+        value := RM(cpu, cart, addr)
+        ADC(cpu, value)
+        cpu.CYC = 4
+        cpu.PC += 3
+        break
+
+    case 0x71: // ADC (Indirect),Y
+        addr := IndY(cpu, cart)
+        value := RM(cpu, cart, addr)
+        ADC(cpu, value)
+        cpu.CYC = 5
+        cpu.PC += 2
+        if cpu.PageCrossed == 1 {
+            cpu.CYC++
+        }
+        break
+
+    case 0x75: // ADC Zero Page,X
+        addr := ZpX(cpu, cart)
+        value := RM(cpu, cart, addr)
+        ADC(cpu, value)
+        cpu.CYC = 4
+        cpu.PC += 2
+        break
+
+    case 0x79: // ADC Absolute,Y
+        addr := AbsY(cpu, cart)
+        value := RM(cpu, cart, addr)
+        ADC(cpu, value)
+        cpu.CYC = 4
+        cpu.PC += 3
+        if cpu.PageCrossed == 1 {
+            cpu.CYC++
+        }
+        break
+
+    case 0x7D: // ADC Absolute,X
+        addr := AbsX(cpu, cart)
+        value := RM(cpu, cart, addr)
+        ADC(cpu, value)
+        cpu.CYC = 4
+        if cpu.PageCrossed == 1 {
+            cpu.CYC++
+        }
+        cpu.PC += 3
+        break
+
+
+
+// Add this case to your switch statement in the emulate function
+case 0x5E: // LSR Absolute,X
+    address := AbsX(cpu, cart)    // Calculate Absolute,X address
+    LSR_M(cpu, cart, address)     // Perform LSR on memory
+    cpu.CYC = 7                   // Set cycle count for LSR Absolute,X
+    cpu.PC += 3                   // Increment Program Counter by 3 bytes (opcode + 2-byte address)
+    break
+
+
+
+
+		
 			
 			default:
 				

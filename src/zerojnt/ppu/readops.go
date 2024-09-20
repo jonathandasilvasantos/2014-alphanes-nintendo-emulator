@@ -23,24 +23,19 @@ import "zerojnt/mapper"
 //import "zerojnt/ioports"
 
 func ReadPPURam(ppu *PPU, addr uint16) byte {
-
-
     newaddr := mapper.PPU(ppu.IO.CART, addr)
 
     if ppu.D.Enable {
-        if newaddr < uint16(len(ppu.D.DUMP)) { return ppu.D.DUMP[addr] }
+        if newaddr < uint16(len(ppu.D.DUMP)) {
+            return ppu.D.DUMP[newaddr] // Correct: use newaddr
+        }
     }
 
-
     var page8bits uint16 = 8192
-    var size uint16 = uint16(ppu.IO.CART.Header.VROM_SIZE)*page8bits
-	    
+    var size uint16 = uint16(ppu.IO.CART.Header.VROM_SIZE) * page8bits
     if newaddr < size {
         return ppu.IO.CART.CHR[newaddr]
     }
 
-
     return ppu.IO.PPU_RAM[newaddr]
-
-    
 }

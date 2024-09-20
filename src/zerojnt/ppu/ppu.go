@@ -33,18 +33,15 @@ var ty uint16 = 0
 
 type PPU struct {
     SCREEN_DATA []int
-
     Name string
     CYC  int
     SCANLINE int
     D    *debug.PPUDebug
-
+    texture *sdl.Texture
     ATTR      byte
     HIGH_TILE byte
     LOW_TILE  byte
-
     VISIBLE_SCANLINE bool
-
     IO *ioports.IOPorts
 }
 
@@ -57,7 +54,7 @@ func StartPPU(IO *ioports.IOPorts) PPU {
     ppu.Name = "RICOH RP-2C02\n"
     fmt.Printf("Started PPU")
     fmt.Printf(ppu.Name)
-    initCanvas()
+    initCanvas( &ppu)
 
     ppu.CYC = 0
     ppu.SCANLINE = -1 // Corrected initialization
@@ -144,13 +141,14 @@ func ClearVBLANK(ppu *PPU) {
     ppu.IO.PPUSTATUS.SPRITE_0_BIT = false
 }
 
-func initCanvas() {
+func initCanvas(ppu *PPU) {
     var winTitle string = "Alphanes"
 
     if err := sdl.Init(sdl.INIT_VIDEO); err != nil {
         fmt.Fprintf(os.Stderr, "Failed to initialize SDL: %s\n", err)
         os.Exit(1)
     }
+
 
     window, err := sdl.CreateWindow(winTitle, sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
         0, 0, sdl.WINDOW_FULLSCREEN_DESKTOP)
@@ -165,30 +163,37 @@ func initCanvas() {
         os.Exit(1)
     }
 
+
+    ppu.texture, err = renderer.CreateTexture(sdl.PIXELFORMAT_ARGB8888, sdl.TEXTUREACCESS_STREAMING, 256, 240)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Failed to create texture: %s\n", err)
+        os.Exit(1)
+    }
+
     renderer.SetLogicalSize(256, 240)
 }
 
 func attrTable(ppu *PPU) [8][8]byte {
     var result [8][8]byte
+    addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + 0x3C0
 
     for y := 0; y < 8; y++ {
         for x := 0; x < 8; x++ {
-            var addr = ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + 0x3C0
-            addr = addr + uint16(y*8+x)
-            result[y][x] = ReadPPURam(ppu, addr)
+            absolute_addr := addr + uint16(y*8+x)
+            result[y][x] = ReadPPURam(ppu, absolute_addr)
         }
     }
     return result
 }
 
-func palForBackground(attr [8][8]byte, x uint16, y uint16) byte {
-    attr_x := x / 4
-    attr_y := y / 4
+func palForBackground(attr [8][8]byte, x int, y int) byte {
+    attr_x := ((x / 4) % 8 + 8) % 8
+    attr_y := ((y / 4) % 8 + 8) % 8
 
     grid := attr[attr_y][attr_x]
 
-    sub_x := (x / 2) % 2
-    sub_y := (y / 2) % 2
+    sub_x := ((x / 2) % 2 + 2) % 2
+    sub_y := ((y / 2) % 2 + 2) % 2
 
     shift := (sub_y*2 + sub_x) * 2
     pal := (grid >> shift) & 0x03
@@ -219,31 +224,34 @@ func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 }
 
 func fetchNametable(ppu *PPU, x uint16, y uint16) byte {
+    x = x % 32
+    y = y % 30
     absolute_addr := ppu.IO.PPUCTRL.BASE_NAMETABLE_ADDR + (y * 32) + x
     return ReadPPURam(ppu, absolute_addr)
 }
 
-func drawBGTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {
+func drawBGTile(ppu *PPU, x int, y int, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool) {
     tile := fetchTile(ppu, index, base_addr)
 
-    wx := x / 8
-    wy := y / 8
+    wx := ((x / 8) % 32 + 32) % 32
+    wy := ((y / 8) % 30 + 30) % 30
+
     attrpal := attrTable(ppu)
-    pal := palForBackground(attrpal, wx, wy)
+    pal := palForBackground(attrpal, wx*8, wy*8)
 
     for ky := 0; ky < 8; ky++ {
         for kx := 0; kx < 8; kx++ {
-            var ox int = int(x) + kx
-            var oy int = int(y) + ky
+            var ox int = x + kx
+            var oy int = y + ky
 
             if flipX {
-                ox = int(x) + (7 - kx)
+                ox = x + (7 - kx)
             }
             if flipY {
-                oy = int(y) + (7 - ky)
+                oy = y + (7 - ky)
             }
 
-            if oy < 240 && ox < 256 {
+            if oy < 240 && ox < 256 && oy >= 0 && ox >= 0 {
                 colorIndex := tile[ky][kx]
                 if ignoreZero && colorIndex == 0 {
                     continue
@@ -295,22 +303,42 @@ func drawTile(ppu *PPU, x uint16, y uint16, index byte, base_addr uint16, flipX 
 }
 
 func ShowScreen(ppu *PPU) {
-    renderer.SetDrawColor(0, 0, 0, 255)
-    renderer.Clear()
+    // Lock the texture to get access to its pixel buffer
+    pixels, pitch, err := ppu.texture.Lock(nil)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Failed to lock texture: %s\n", err)
+        os.Exit(1)
+    }
+    defer ppu.texture.Unlock()
 
+    // Convert pixels to a slice for easy access
+    pixelData := pixels[:(pitch * 240)] // 240 rows
+
+    // Write pixel data into the texture
     for y := 0; y < 240; y++ {
         for x := 0; x < 256; x++ {
             c := READ_SCREEN(ppu, x, y)
-            renderer.SetDrawColor(colors[c][0], colors[c][1], colors[c][2], 255)
-            if c == 0 {
-                renderer.SetDrawColor(0, 0, 0, 255)
-            }
+            color := colors[c] // colors is [][]byte
 
-            renderer.DrawPoint(int32(x), int32(y))
+            offset := y*pitch + x*4
+            pixelData[offset+0] = color[2] // Blue
+            pixelData[offset+1] = color[1] // Green
+            pixelData[offset+2] = color[0] // Red
+            pixelData[offset+3] = 255      // Alpha
         }
     }
+
+    // Clear the renderer
+    renderer.SetDrawColor(0, 0, 0, 255)
+    renderer.Clear()
+
+    // Copy the texture to the renderer
+    renderer.Copy(ppu.texture, nil, nil)
+
+    // Present the renderer
     renderer.Present()
 }
+
 
 func READ_SCREEN(ppu *PPU, x int, y int) int {
     if x >= 256 || y >= 240 || x < 0 || y < 0 {
@@ -331,15 +359,25 @@ func handleBackground(ppu *PPU) {
         return
     }
 
-    for ly := 0; ly < 30; ly++ {
-        for lx := 0; lx < 32; lx++ {
-            x := uint16(lx)
-            y := uint16(ly)
+    scrollX := int(ppu.IO.PPUSCROLL.X)
+    scrollY := int(ppu.IO.PPUSCROLL.Y)
 
-            tileid := fetchNametable(ppu, x, y)
+    for tileY := 0; tileY < 30; tileY++ {
+        for tileX := 0; tileX <= 32; tileX++ {
+            //scrolledX := (tileX*8 - (scrollX % 256)) % 512
+            //scrolledY := (tileY*8 - (scrollY % 240)) % 480
+
+            nametableTileX := (scrollX/8 + tileX) % 32
+            nametableTileY := (scrollY/8 + tileY) % 30
+
+            tileid := fetchNametable(ppu, uint16(nametableTileX), uint16(nametableTileY))
+
+            screenX := (tileX*8 - (scrollX % 8))
+            screenY := (tileY*8 - (scrollY % 8))
+
             drawBGTile(ppu,
-                x*8,
-                y*8,
+                screenX,
+                screenY,
                 tileid,
                 ppu.IO.PPUCTRL.BACKGROUND_ADDR,
                 false,

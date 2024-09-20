@@ -136,15 +136,13 @@ func WRITE_OAMDATA(IO *IOPorts, value byte) {
 }
 
 func WRITE_PPUSCROLL(IO *IOPorts, value byte) {
-
-	if IO.PPU_MEMORY_STEP == 0 {
-		IO.PPUSCROLL.Y = value
-		IO.PPU_MEMORY_STEP = 1		
-	} else {
-		IO.PPUSCROLL.X = value
-		IO.PPU_MEMORY_STEP = 0		
-	}
-	
+    if IO.PPU_MEMORY_STEP == 0 {
+        IO.PPUSCROLL.X = value
+        IO.PPU_MEMORY_STEP = 1
+    } else {
+        IO.PPUSCROLL.Y = value
+        IO.PPU_MEMORY_STEP = 0
+    }
 }
 
 func WRITE_PPUADDR(IO *IOPorts, value byte) {
