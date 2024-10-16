@@ -83,24 +83,28 @@ type IOPorts struct {
 }
 
 func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
-	var io IOPorts
-	io.CPU_RAM = make([]byte, 0xFFFF)
+    var io IOPorts
+    io.CPU_RAM = make([]byte, 0xFFFF)
+    io.PPU_RAM = make([]byte, 0xFFFF)
+    io.NMI = false
 
-        io.CART = cart
+    // Initialize palette RAM with NES default palette (example values)
+    default_palette := []byte{
+        0x0F, 0x1B, 0x2F, 0x3F, // ... fill in the complete NES palette
+        // Ensure you have all 32 palette entries
+    }
+    for i, c := range default_palette {
+        io.PPU_RAM[0x3F00+uint16(i)] = c
+    }
 
-	
-	// TODO: make dynamic memory reserve
-	io.PPU_RAM = make([]byte, 0xFFFF)
-	
-	
-	io.NMI = false
-	
-	io.PPUSTATUS.NMI_OCCURRED = false
-	io.PPUSTATUS.SPRITE_0_BIT = false
-	io.PPUSTATUS.SPRITE_OVERFLOW = false
-	io.PREVIOUS_READ = 0
-	io.PPU_OAM = make([]byte, 256)
-	return io
+    io.PPUSTATUS.NMI_OCCURRED = false
+    io.PPUSTATUS.SPRITE_0_BIT = false
+    io.PPU_MEMORY_STEP = 0
+    io.PPU_OAM = make([]byte, 256)
+    io.CART = cart
+    io.CPU_CYC_INCREASE = 0
+
+    return io
 }
 
 func RMPPU(IO *IOPorts, cart *cartridge.Cartridge, addr uint16) byte {

@@ -77,41 +77,56 @@ func MemoryMapper(cart *cartridge.Cartridge, addr uint16) (bool, uint16) {
 	return false, 0
 }
 
+// PPU maps the CPU address to the appropriate PPU address, handling nametable mirroring
+// and palette mirroring based on the cartridge's configuration.
 func PPU(cart *cartridge.Cartridge, addr uint16) uint16 {
+    // Handle palette mirroring: $3F10/$3F14/$3F18/$3F1C mirror $3F00/$3F04/$3F08/$3F0C respectively
+    switch addr {
+    case 0x3F10, 0x3F14, 0x3F18, 0x3F1C:
+        addr = 0x3F00 + (addr % 0x20)
+    }
 
-    // Addresses $3F10/$3F14/$3F18/$3F1C are mirrors of $3F00/$3F04/$3F08/$3F0C. 
-        //if (addr == 0x3F10) { return 0x3F00 }
-        //if (addr == 0x3F14) { return 0x3F04 }
-        //if (addr == 0x3F18) { return 0x3F08 }
-        //if (addr == 0x3F1C) { return 0x3F0C }
-
-	//Horizontal mirroring: $2000 equals $2400 and
-	// $2800 equals $2C00 (e.g. Kid Icarus)
-        if (addr >= 0x2400) && (addr < 0x2800) {
-            return addr - 0x400
+    // Apply nametable mirroring for addresses $2000 - $2FFF
+    if addr >= 0x2000 && addr < 0x3000 {
+        if cart.Header.RomType.VerticalMirroring {
+            // Vertical Mirroring: $2000 mirrors $2800, $2400 mirrors $2C00
+            if addr >= 0x2800 && addr < 0x2C00 {
+                addr -= 0x800 // Mirror $2800-$2BFF to $2000-$23FF
+            }
+            if addr >= 0x2C00 && addr < 0x3000 {
+                addr -= 0x800 // Mirror $2C00-$2FFF to $2400-$27FF
+            }
+        } else {
+            // Horizontal Mirroring: $2000 mirrors $2400, $2800 mirrors $2C00
+            if addr >= 0x2400 && addr < 0x2800 {
+                addr -= 0x400 // Mirror $2400-$27FF to $2000-$23FF
+            }
+            if addr >= 0x2C00 && addr < 0x3000 {
+                addr -= 0x400 // Mirror $2C00-$2FFF to $2800-$2BFF
+            }
         }
-        if (addr >= 0x2C00) && (addr < 0x3000) {
-            return addr - 0x400
-        }
+    }
 
-	// Vertical mirroring: $2000 equals $2800 and $2400 equals
-	// $2C00 (e.g. Super Mario Bros.)
+    // Handle addresses $3000 - $3EFF by mirroring them to $2000 - $2EFF
+    if addr >= 0x3000 && addr < 0x4000 {
+        addr -= 0x1000 // Mirror $3000-$3EFF to $2000-$2EFF
+    }
 
-	if (cart.Header.RomType.VerticalMirroring) {
-		if (addr >= 0x2800) && (addr < 0x2C00) {
-			addr = addr - 0x800
-		}
-		if (addr >= 0x2C00) && (addr < 0x3000) {
-			addr = addr - 0x800
-		}
-	}
-	
-	if (addr >= 0x3F00 && addr <= 0x3FFF) {
-		return 0x3F00 + (addr%32)
-	}
-	
-	if (addr >= 0x4000) {
-		return PPU(cart, addr % 0x4000)
-	}
-	return addr
+    // Handle palette mirroring again for safety (optional, as handled above)
+    if addr >= 0x3F00 && addr <= 0x3FFF {
+        addr = 0x3F00 + (addr % 0x20)
+    }
+
+    // Recursively handle addresses beyond $3FFF by wrapping around
+    if addr >= 0x4000 {
+        return PPU(cart, addr%0x4000)
+    }
+
+    // Log an error if the address is out of range (optional)
+    if addr > 0x3FFF {
+        log.Printf("PPU Address out of range: %X\n", addr)
+        return 0x3F00 // Default to background palette
+    }
+
+    return addr
 }

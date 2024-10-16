@@ -873,7 +873,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.PC = cpu.PC + 2
 			break
 			
-		case 0xC1: // EOR IndX
+		case 0xC1: // CMP IndX
 			CMP(cpu, uint16(RM(cpu, cart, IndX(cpu, cart))))
 			cpu.CYC = 6
 			cpu.PC = cpu.PC + 2

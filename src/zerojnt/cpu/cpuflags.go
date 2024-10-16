@@ -19,13 +19,12 @@ This file is part of Alphanes.
 package cpu
 
 
-func FlagC(cpu *CPU) byte { return (cpu.P << 7) >> 7}
-func FlagZ(cpu *CPU) byte { return (cpu.P << 6) >> 7 }
-func FlagI(cpu *CPU) byte { return (cpu.P << 5) >> 7 }
-func FlagD(cpu *CPU) byte { return (cpu.P << 4) >> 7 }
-func FlagV(cpu *CPU) byte { return (cpu.P << 1) >> 7 }
-func FlagN(cpu *CPU) byte { return cpu.P  >> 7 }
-
+func FlagC(cpu *CPU) byte { return cpu.P & 0x01 }
+func FlagZ(cpu *CPU) byte { return (cpu.P & 0x02) >> 1 }
+func FlagI(cpu *CPU) byte { return (cpu.P & 0x04) >> 2 }
+func FlagD(cpu *CPU) byte { return (cpu.P & 0x08) >> 3 }
+func FlagV(cpu *CPU) byte { return (cpu.P & 0x40) >> 6 }
+func FlagN(cpu *CPU) byte { return (cpu.P & 0x80) >> 7 }
 
 
 func SetP(cpu *CPU, value byte) {

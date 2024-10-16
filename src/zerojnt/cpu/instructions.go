@@ -21,11 +21,6 @@ package cpu
 import "zerojnt/cartridge"
 
 
-
-
-
-
-
 // A logical AND is performed, bit by bit, on the accumulator contents using the contents of a byte of memory.
 func AND (cpu *CPU, value uint16) {
 	cpu.A = cpu.A & byte(value)
