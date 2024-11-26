@@ -52,19 +52,72 @@ var colors = rgb() // Assume rgb() is defined elsewhere
 func StartPPU(IO *ioports.IOPorts) PPU {
     var ppu PPU
     ppu.Name = "RICOH RP-2C02\n"
-    fmt.Printf("Started PPU")
-    fmt.Printf(ppu.Name)
-    initCanvas( &ppu)
+    fmt.Printf("Started PPU: %s", ppu.Name)
 
+    // Initialize PPU hardware state
     ppu.CYC = 0
-    ppu.SCANLINE = -1 // Corrected initialization
+    ppu.SCANLINE = -1  // Pre-render scanline
     ppu.IO = IO
-
-    ppu.SCREEN_DATA = make([]int, 256*240) // Corrected size
-
+    ppu.VISIBLE_SCANLINE = false
+    
+    // Initialize screen buffer
+    ppu.SCREEN_DATA = make([]int, 256*240)
+    
+    // Initialize PPU Control Register (PPUCTRL) $2000
+    ppu.IO.PPUCTRL = ioports.PPU_CTRL{
+        BASE_NAMETABLE_ADDR: 0x2000,  // Use first nametable
+        VRAM_INCREMENT: 1,            // Increment by 1 (horizontal mode)
+        SPRITE_8_ADDR: 0x0000,        // Use pattern table 0 for sprites
+        BACKGROUND_ADDR: 0x0000,      // Use pattern table 0 for background
+        SPRITE_SIZE: 8,               // 8x8 sprites
+        MASTER_SLAVE_SWITCH: 0,       // Master mode
+        GEN_NMI: true,               // Enable VBlank NMI
+    }
+    
+    // Initialize PPU Mask Register (PPUMASK) $2001
+    ppu.IO.PPUMASK = ioports.PPU_MASK{
+        GREYSCALE: false,
+        SHOW_LEFTMOST_8_BACKGROUND: true,
+        SHOW_LEFTMOST_8_SPRITE: true,
+        SHOW_BACKGROUND: true,        // Enable background rendering
+        SHOW_SPRITE: true,           // Enable sprite rendering
+        RED_BOOST: false,
+        GREEN_BOOST: false,
+        BLUE_BOOST: false,
+    }
+    
+    // Initialize PPU Status Register (PPUSTATUS) $2002
+    ppu.IO.PPUSTATUS = ioports.PPU_STATUS{
+        WRITTEN: 0,
+        SPRITE_OVERFLOW: false,
+        SPRITE_0_BIT: false,
+        VBLANK: false,
+        NMI_OCCURRED: false,
+    }
+    
+    // Initialize PPU Scroll Register
+    ppu.IO.PPUSCROLL = ioports.PPU_SCROLL{
+        X: 0,
+        Y: 0,
+    }
+    
+    // Initialize internal PPU state
+    ppu.IO.PPU_MEMORY_STEP = 0
+    ppu.IO.PPU_MEMORY_LOWER = 0
+    ppu.IO.PPU_MEMORY_HIGHER = 0
+    ppu.IO.VRAM_ADDRESS = 0
+    
+    // Initialize rendering state
+    ppu.ATTR = 0
+    ppu.HIGH_TILE = 0
+    ppu.LOW_TILE = 0
+    
+    // Initialize the SDL canvas
+    initCanvas(&ppu)
+    
+    fmt.Printf("PPU Initialization complete\n")
     return ppu
 }
-
 func checkVisibleScanline(ppu *PPU) {
     if ppu.SCANLINE >= 0 && ppu.SCANLINE < 240 {
         ppu.VISIBLE_SCANLINE = true
@@ -108,7 +161,7 @@ func Process(ppu *PPU, cart *cartridge.Cartridge) {
     }
 
     ppu.CYC = ppu.CYC + 1
-    if ppu.CYC > 340 { // Corrected cycle count
+    if ppu.CYC >= 341 { // Corrected cycle count
         ppu.CYC = 0
         ppu.SCANLINE = ppu.SCANLINE + 1
 
@@ -244,20 +297,41 @@ func fetchTile(ppu *PPU, index byte, base_addr uint16) [8][8]byte {
 }
 
 func fetchNametable(ppu *PPU, x uint16, y uint16) byte {
-    x = x % 64  // 64 tiles horizontally (512 pixels / 8 pixels per tile)
-    y = y % 60  // 60 tiles vertically (480 pixels / 8 pixels per tile)
-
-    nametable_x := (x / 32) % 2  // 0 or 1
-    nametable_y := (y / 30) % 2  // 0 or 1
-
-    nametable_base := uint16(0x2000) + uint16(nametable_y*2+nametable_x)*0x400
-
-    tile_x := x % 32
-    tile_y := y % 30
-
-    absolute_addr := nametable_base + tile_y*32 + tile_x
-
-    return ReadPPURam(ppu, absolute_addr)
+    // Get base nametable from PPUCTRL
+    
+    
+    // Calculate which nametable we're in (0-3)
+    ntX := (x / 32) % 2
+    ntY := (y / 30) % 2
+    
+    // Calculate the actual nametable address based on mirroring
+    var nametableAddr uint16
+    if ppu.IO.CART.Header.RomType.VerticalMirroring {
+        // In vertical mirroring:
+        // NT 0 and 2 are mirror pairs
+        // NT 1 and 3 are mirror pairs
+        nametableAddr = 0x2000 + (ntX * 0x400)
+        if ntY == 1 {
+            nametableAddr += 0x800
+        }
+    } else {
+        // In horizontal mirroring:
+        // NT 0 and 1 are mirror pairs
+        // NT 2 and 3 are mirror pairs
+        nametableAddr = 0x2000 + (ntY * 0x800)
+        if ntX == 1 {
+            nametableAddr += 0x400
+        }
+    }
+    
+    // Calculate position within the nametable
+    tileX := x % 32
+    tileY := y % 30
+    
+    // Calculate final address
+    addr := nametableAddr + (tileY * 32) + tileX
+    
+    return ReadPPURam(ppu, addr)
 }
 
 func drawBGTile(ppu *PPU, x int, y int, index byte, base_addr uint16, flipX bool, flipY bool, ignoreZero bool, tileX int, tileY int) {
@@ -388,31 +462,42 @@ func handleBackground(ppu *PPU) {
     scrollX := int(ppu.IO.PPUSCROLL.X)
     scrollY := int(ppu.IO.PPUSCROLL.Y)
 
-    for tileY := -1; tileY < 30+1; tileY++ {
-        for tileX := -1; tileX < 32+1; tileX++ {
-            tileX_global := (scrollX/8 + tileX) % 64
-            tileY_global := (scrollY/8 + tileY) % 60
+    // Calculate starting tile positions
+    startX := scrollX / 8
+    startY := scrollY / 8
+    
+    // Calculate pixel offsets
+    offsetX := -(scrollX % 8)
+    offsetY := -(scrollY % 8)
 
-            tileid := fetchNametable(ppu, uint16(tileX_global), uint16(tileY_global))
+    // Draw enough tiles to cover screen plus one extra tile for smooth scrolling
+    for y := -1; y <= 30; y++ {
+        for x := -1; x <= 32; x++ {
+            // Calculate global tile position
+            tileX := uint16((startX + x) & 0x3F) // Wrap at 64 tiles (2 nametables wide)
+            tileY := uint16((startY + y) & 0x3F) // Wrap at 64 tiles (2 nametables high)
 
-            screenX := (tileX*8 - (scrollX % 8))
-            screenY := (tileY*8 - (scrollY % 8))
+            // Fetch tile index from appropriate nametable
+            tileIndex := fetchNametable(ppu, tileX, tileY)
 
+            // Calculate screen position
+            screenX := (x * 8) + offsetX
+            screenY := (y * 8) + offsetY
+
+            // Draw the tile
             drawBGTile(ppu,
                 screenX,
                 screenY,
-                tileid,
+                tileIndex,
                 ppu.IO.PPUCTRL.BACKGROUND_ADDR,
                 false,
                 false,
                 false,
-                tileX_global,
-                tileY_global)
+                int(tileX),
+                int(tileY))
         }
     }
 }
-
-
 func handleSprite(ppu *PPU) {
     if !ppu.IO.PPUMASK.SHOW_SPRITE {
         return

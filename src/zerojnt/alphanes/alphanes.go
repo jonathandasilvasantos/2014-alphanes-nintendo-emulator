@@ -79,21 +79,12 @@ import "os"
 }
 
 func emulate() {
-
-	var ppudelay = 0
-
-	for Alphanes.Running == true && Nescpu.Running == true {
-		
-		cpu.Process(&Nescpu, &Cart)
-				
-		if ppudelay < 30000 {
-			ppudelay = ppudelay + 1
-		} else {
-			for x := 0; x < 3; x++ {
-                            //if Nescpu.D.Enable { break }
-				ppu.Process(&Nesppu, &Cart)
-			}
-		}
-		
-	}
+    for Alphanes.Running == true && Nescpu.Running == true {
+        cpu.Process(&Nescpu, &Cart)
+        
+        // Execute 3 ciclos de PPU para cada ciclo de CPU
+        for i := 0; i < 3; i++ {
+            ppu.Process(&Nesppu, &Cart)
+        }
+    }
 }
