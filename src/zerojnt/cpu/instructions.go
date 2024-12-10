@@ -620,10 +620,9 @@ func JSR(cpu *CPU, value uint16) {
 
 // The BRK instruction forces the generation of an interrupt request. The program counter and processor status are pushed on the stack then the IRQ interrupt vector at $FFFE/F is loaded into the PC and the break flag in the status set to one.
 func BRK(cpu *CPU, cart *cartridge.Cartridge) {
-    
     returnAddress := (cpu.PC + 2) & 0xFFFF
     PushWord(cpu, returnAddress)
-    statusWithBreak := cpu.P | 0x10
+    statusWithBreak := cpu.P | 0x10 // Set bit 4 (B flag)
     PushMemory(cpu, statusWithBreak)
     SetI(cpu, 1)
     low := RM(cpu, cart, 0xFFFE)
@@ -636,10 +635,7 @@ func BRK(cpu *CPU, cart *cartridge.Cartridge) {
 // Pulls an 8-bit value from the stack and into the processor flags.
 // Ensures that Bit 5 is always set and Bit 4 (Break) is cleared.
 func RTI(cpu *CPU) {
-    
-    var all byte = PopMemory(cpu)
-    // Correctly handle the processor status
-    newP := (all & 0xEF) | 0x20
-    SetP(cpu, newP)
+    cpu.P = PopMemory(cpu)
+    cpu.P = (cpu.P & 0xEF) | 0x20 // Clear bit 4, set bit 5
     cpu.PC = PopWord(cpu)
 }
