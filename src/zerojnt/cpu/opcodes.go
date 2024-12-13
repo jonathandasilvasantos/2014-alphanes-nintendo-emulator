@@ -22,39 +22,25 @@ import "zerojnt/cartridge"
 import "fmt"
 
 func nmi(cpu *CPU, cart *cartridge.Cartridge) {
-    // 1. Push the current Program Counter (PC) onto the stack.
-    //    The PC should point to the next instruction to execute after returning from the NMI.
+    // 1. Push PC to stack
     PushWord(cpu, cpu.PC)
-
-    // 2. Push the Processor Status Register (P) onto the stack.
-    //    This saves the current state of the processor flags.
-    PushMemory(cpu, cpu.P)
-
-    // 3. Set the Program Counter (PC) to the NMI vector located at $FFFA/B.
-    //    This tells the CPU where to jump to handle the NMI.
+    
+    // 2. Push processor status with B flag clear
+    statusToPush := cpu.P & 0xEF // Clear B flag
+    statusToPush |= 0x20         // Set bit 5 (always set when pushed)
+    PushMemory(cpu, statusToPush)
+    
+    // 3. Set interrupt disable flag
+    SetI(cpu, 1)
+    
+    // 4. Load PC from NMI vector
     nmiVectorLow := RM(cpu, cart, 0xFFFA)
     nmiVectorHigh := RM(cpu, cart, 0xFFFB)
     cpu.PC = LE(nmiVectorLow, nmiVectorHigh)
-
-    // 4. Set the Interrupt Disable Flag (I) to prevent further IRQs.
-    //    NMIs are non-maskable and will still occur regardless of this flag.
-    SetI(cpu, 1)
-
-    // 5. Reset specific PPU status flags and variables as needed.
-    //    Ensure these resets align with NES hardware behavior.
-    cpu.IO.PPUSTATUS.WRITTEN = 0
-    cpu.IO.PPU_MEMORY_STEP = 0
-    cpu.IO.VRAM_ADDRESS = 0
-
-    // 6. Set the CPU cycle count to reflect the time taken to handle the NMI.
-    //    The NES CPU takes 7 cycles to process an NMI.
+    
+    // 5. Add NMI cycles (7 cycles total)
     cpu.CYC = 7
-
-    // 7. (Optional) Log or debug information for verification.
-    //    Uncomment the following line if you want to see when an NMI is triggered.
-    // fmt.Println("NMI triggered and handled.")
 }
-
 
 func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 
@@ -107,13 +93,12 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 		return
 	}
 	
-	// Handle NMI Interruption
-	if cpu.IO.NMI && (cpu.D.Enable == false){
-		nmi(cpu, cart)
-		cpu.IO.NMI = false
-		return	
-	}
-
+	if cpu.IO.NMI {
+        nmi(cpu, cart)
+        cpu.IO.NMI = false
+        return // Ensure we don't execute a regular instruction after NMI
+    }
+	
         op = RM(cpu, cart, cpu.PC)
         cpu.lastPC = cpu.PC
 
@@ -1086,6 +1071,7 @@ func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 			cpu.CYC = 6
 			cpu.PC = cpu.PC + 3
 			break
+			
 						
 		case 0xF0: // BEQ Relative
 			BEQ(cpu, Rel(cpu, cart))
@@ -1394,6 +1380,8 @@ case 0x5E: // LSR Absolute,X
 				
 				cpu.Running = false
 	}
+
+	cpu.cycleCount++ // Increment the global cycle counter
 	
 }
 

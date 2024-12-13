@@ -10,632 +10,540 @@ This file is part of Alphanes.
 
     Alphanes is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with Alphanes.  If not, see <http://www.gnu.org/licenses/>.
+    along with Alphanes. If not, see <http://www.gnu.org/licenses/>.
 */
 package cpu
 
 import "zerojnt/cartridge"
 
-
+// AND (Logical AND)
 // A logical AND is performed, bit by bit, on the accumulator contents using the contents of a byte of memory.
-func AND (cpu *CPU, value uint16) {
-	cpu.A = cpu.A & byte(value)
-	ZeroFlag(cpu, uint16 (cpu.A))
-	SetN(cpu, ((cpu.A >> 7) & 1))
+func AND(cpu *CPU, value uint16) {
+	cpu.A &= byte(value)       // Perform bitwise AND with the value
+	ZeroFlag(cpu, uint16(cpu.A)) // Update Zero Flag based on the result
+	SetN(cpu, cpu.A>>7)         // Update Negative Flag based on bit 7 of the result
 }
 
-// This operation shifts all the bits of the accumulator or memory contents one bit left. Bit 0 is set to 0 and bit 7 is placed in the carry flag. The effect of this operation is to multiply the memory contents by 2 (ignoring 2's complement considerations), setting the carry if the result will not fit in 8 bits.
-// ASL on Accumulator
+// ASL (Arithmetic Shift Left - Accumulator)
+// This operation shifts all the bits of the accumulator one bit left.
+// Bit 0 is set to 0, and bit 7 is placed in the carry flag.
 func ASL_A(cpu *CPU) {
-    SetC(cpu, Bit7(cpu.A))          // Set Carry Flag to bit 7 of A
-    cpu.A = cpu.A << 1               // Shift A left by 1
-    ZeroFlag(cpu, uint16(cpu.A))     // Set Zero Flag
-    SetN(cpu, (cpu.A>>7)&1)          // Set Negative Flag based on new bit 7
+	SetC(cpu, (cpu.A>>7)&1)     // Set Carry Flag to the original bit 7 of A
+	cpu.A <<= 1                // Shift A left by 1 bit
+	ZeroFlag(cpu, uint16(cpu.A)) // Update Zero Flag based on the result
+	SetN(cpu, cpu.A>>7)         // Update Negative Flag based on the new bit 7
 }
 
-// ASL on Memory
+// ASL (Arithmetic Shift Left - Memory)
+// This operation shifts all the bits of the memory contents one bit left.
+// Bit 0 is set to 0, and bit 7 is placed in the carry flag.
 func ASL_M(cpu *CPU, cart *cartridge.Cartridge, address uint16) {
-    value := RM(cpu, cart, address)   // Read memory value
-    SetC(cpu, Bit7(value))           // Set Carry Flag to bit 7 of value
-    shifted := value << 1             // Shift left by 1
-    WM(cpu, cart, address, shifted)   // Write back to memory
-    ZeroFlag(cpu, uint16(shifted))    // Set Zero Flag
-    SetN(cpu, (shifted>>7)&1)         // Set Negative Flag based on new bit 7
+	value := RM(cpu, cart, address) // Read the value from memory
+	SetC(cpu, (value>>7)&1)     // Set Carry Flag to the original bit 7
+	value <<= 1                // Shift the value left by 1 bit
+	WM(cpu, cart, address, value)   // Write the shifted value back to memory
+	ZeroFlag(cpu, uint16(value)) // Update Zero Flag based on the result
+	SetN(cpu, value>>7)         // Update Negative Flag based on the new bit 7
 }
 
-// ADC (Add with Carry) instruction
+// ADC (Add with Carry)
+// Adds the contents of a memory location to the accumulator together with the carry bit.
 func ADC(cpu *CPU, value byte) {
-    // Convert registers and value to uint16 for addition to handle overflow
-    a := uint16(cpu.A)
-    m := uint16(value)
-    c := uint16( FlagC(cpu)   ) // Assume GetCarryFlag returns 0 or 1
+	a := uint16(cpu.A)
+	c := uint16(FlagC(cpu))
+	sum := a + uint16(value) + c
 
-    // Perform the addition with carry
-    sum := a + m + c
-    result := byte(sum & 0xFF) // Keep only the lower 8 bits
+	// Set Carry if there's an overflow beyond 8 bits
+	SetC(cpu, BoolToByte(sum > 255))
 
-    // Set Carry flag if sum exceeds 255
-    if sum > 0xFF {
-        SetC(cpu, 1)
-    } else {
-        SetC(cpu, 0)
-    }
+	// Set Overflow if the sign of both inputs is different from the sign of the result
+	SetV(cpu, BoolToByte(((cpu.A^value)&0x80 == 0) && ((cpu.A^byte(sum))&0x80 != 0)))
 
-    // Set Zero flag if result is zero
-    if result == 0 {
-        SetZ(cpu, 1)
-    } else {
-        SetZ(cpu, 0)
-    }
-
-    // Set Negative flag based on bit 7 of the result
-    SetN(cpu, (result>>7)&1)
-
-    // Set Overflow flag
-    // Overflow occurs if the sign bits of A and M are the same,
-    // but the sign bit of the result is different
-    if (((cpu.A ^ value) & 0x80) == 0) && (((cpu.A ^ result) & 0x80) != 0) {
-        SetV(cpu, 1)
-    } else {
-        SetV(cpu, 0)
-    }
-
-    // Update the Accumulator with the result
-    cpu.A = result
+	cpu.A = byte(sum)          // Update accumulator with the result
+	ZeroFlag(cpu, uint16(cpu.A)) // Update Zero Flag
+	SetN(cpu, cpu.A>>7)         // Update Negative Flag
 }
 
-
-// If the carry flag is clear then add the relative displacement to the program counter to cause a branch to a new location.
+// BCC (Branch if Carry Clear)
+// If the carry flag is clear, then add the relative displacement to the program counter.
 func BCC(cpu *CPU, value uint16) {
-    cpu.CYCSpecial = 0;
-
-    if (FlagC(cpu)) == 0 {
-        Branch(cpu, value)
-        return
-    }
-    cpu.PC += 2
+	cpu.CYCSpecial = 0
+	if FlagC(cpu) == 0 {
+		Branch(cpu, value)
+	} else {
+		cpu.PC += 2
+	}
 }
 
-// If the carry flag is set then add the relative displacement to the program counter to cause a branch to a new location.
+// BCS (Branch if Carry Set)
+// If the carry flag is set, then add the relative displacement to the program counter.
 func BCS(cpu *CPU, value uint16) {
-    cpu.CYCSpecial = 0;
-
-    if (FlagC(cpu)) == 1 {
-        Branch(cpu, value)
-        return
-    }
-    cpu.PC += 2
+	cpu.CYCSpecial = 0
+	if FlagC(cpu) == 1 {
+		Branch(cpu, value)
+	} else {
+		cpu.PC += 2
+	}
 }
 
-// If the zero flag is set then add the relative displacement to the program counter to cause a branch to a new location.
+// BEQ (Branch if Equal)
+// If the zero flag is set, then add the relative displacement to the program counter.
 func BEQ(cpu *CPU, value uint16) {
-	cpu.CYCSpecial = 0;
-
-    if (FlagZ(cpu)) == 1 {
-        Branch(cpu, value)
-        return
-    }
-    cpu.PC += 2
+	cpu.CYCSpecial = 0
+	if FlagZ(cpu) == 1 {
+		Branch(cpu, value)
+	} else {
+		cpu.PC += 2
+	}
 }
 
-// This instructions is used to test if one or more bits are set in a target memory location. The mask pattern in A is ANDed with the value in memory to set or clear the zero flag, but the result is not kept. Bits 7 and 6 of the value from memory are copied into the N and V flags.
+// BIT (Bit Test)
+// Tests if one or more bits are set in a target memory location.
 func BIT(cpu *CPU, cart *cartridge.Cartridge, value uint16) {
-	var v byte = RM(cpu, cart, value)
-	var b byte = cpu.A & v
-	ZeroFlag(cpu, uint16(b))
-	SetN(cpu, Bit7(v))
-	SetV(cpu, Bit6(v))
+	memValue := RM(cpu, cart, value)
+	result := cpu.A & memValue
+	ZeroFlag(cpu, uint16(result)) // Update Zero Flag based on the AND result
+	SetN(cpu, memValue>>7)         // Update Negative Flag based on bit 7 of memory value
+	SetV(cpu, (memValue>>6)&1)     // Update Overflow Flag based on bit 6 of memory value
 }
 
-// If the negative flag is set then add the relative displacement to the program counter to cause a branch to a new location.
+// BMI (Branch if Minus)
+// If the negative flag is set, then add the relative displacement to the program counter.
 func BMI(cpu *CPU, value uint16) {
-    cpu.CYCSpecial = 0;
-
-    if (FlagN(cpu)) == 1 {
-        Branch(cpu, value)
-        return
-    }
-    cpu.PC += 2
+	cpu.CYCSpecial = 0
+	if FlagN(cpu) == 1 {
+		Branch(cpu, value)
+	} else {
+		cpu.PC += 2
+	}
 }
 
-// If the zero flag is clear then add the relative displacement to the program counter to cause a branch to a new location.
+// BNE (Branch if Not Equal)
+// If the zero flag is clear, then add the relative displacement to the program counter.
 func BNE(cpu *CPU, value uint16) {
-    cpu.CYCSpecial = 0;
-
-    if (FlagZ(cpu)) == 0 {
-        Branch(cpu, value)
-        return
-    }
-    cpu.PC += 2
+	cpu.CYCSpecial = 0
+	if FlagZ(cpu) == 0 {
+		Branch(cpu, value)
+	} else {
+		cpu.PC += 2
+	}
 }
 
-
-
-// If the negative flag is clear then add the relative displacement to the program counter to cause a branch to a new location.
+// BPL (Branch if Positive)
+// If the negative flag is clear, then add the relative displacement to the program counter.
 func BPL(cpu *CPU, value uint16) {
-    cpu.CYCSpecial = 0;
-
-    if (FlagN(cpu)) == 0 {
-        Branch(cpu, value)
-        return
-    }
-    cpu.PC += 2
+	cpu.CYCSpecial = 0
+	if FlagN(cpu) == 0 {
+		Branch(cpu, value)
+	} else {
+		cpu.PC += 2
+	}
 }
 
-
-// If the overflow flag is clear then add the relative displacement to the program counter to cause a branch to a new location.
+// BVC (Branch if Overflow Clear)
+// If the overflow flag is clear, then add the relative displacement to the program counter.
 func BVC(cpu *CPU, value uint16) {
-    cpu.CYCSpecial = 0;
-
-    if (FlagV(cpu)) == 0 {
-        Branch(cpu, value)
-        return
-    }
-    cpu.PC += 2
+	cpu.CYCSpecial = 0
+	if FlagV(cpu) == 0 {
+		Branch(cpu, value)
+	} else {
+		cpu.PC += 2
+	}
 }
 
-
-// If the overflow flag is set then add the relative displacement to the program counter to cause a branch to a new location.
+// BVS (Branch if Overflow Set)
+// If the overflow flag is set, then add the relative displacement to the program counter.
 func BVS(cpu *CPU, value uint16) {
-    cpu.CYCSpecial = 0;
-
-    if (FlagV(cpu)) == 1 {
-        Branch(cpu, value)
-        return
-    }
-    cpu.PC += 2
+	cpu.CYCSpecial = 0
+	if FlagV(cpu) == 1 {
+		Branch(cpu, value)
+	} else {
+		cpu.PC += 2
+	}
 }
 
-// This instruction compares the contents of the accumulator with another memory held value and sets the zero and carry flags as appropriate.
+// CMP (Compare)
+// Compares the contents of the accumulator with another memory held value.
 func CMP(cpu *CPU, value uint16) {
-	var tmp uint16 = uint16(cpu.A) - value
-
-	SetN(cpu, ((byte(tmp) >> 7) & 1))
-	SetC(cpu, 0)
-	SetZ(cpu, 0)
-	if uint16(cpu.A) >= value {
-		SetC(cpu, 1)
-	}
-	if uint16(cpu.A) == value {
-		SetZ(cpu, 1)
-	}
+	result := uint16(cpu.A) - value
+	SetC(cpu, BoolToByte(cpu.A >= byte(value))) // Set Carry if A >= value
+	ZeroFlag(cpu, result)                     // Update Zero Flag
+	SetN(cpu, byte(result>>7))                // Update Negative Flag
 }
 
-
-// Set the carry flag to zero
+// CLC (Clear Carry Flag)
+// Sets the carry flag to zero.
 func CLC(cpu *CPU) {
 	SetC(cpu, 0)
 }
 
+// CLD (Clear Decimal Mode)
 // Sets the decimal mode flag to zero.
 func CLD(cpu *CPU) {
 	SetD(cpu, 0)
 }
 
-// Clears the interrupt disable flag allowing normal interrupt requests to be serviced.
+// CLI (Clear Interrupt Disable)
+// Clears the interrupt disable flag, allowing normal interrupt requests to be serviced.
 func CLI(cpu *CPU) {
 	SetI(cpu, 0)
 }
 
+// CLV (Clear Overflow Flag)
 // Clears the overflow flag.
 func CLV(cpu *CPU) {
 	SetV(cpu, 0)
 }
 
-// This instruction compares the contents of the X register with another memory held value and sets the zero and carry flags as appropriate.
-func CPX (cpu *CPU, value uint16) {
-	var tmp byte = cpu.X - byte(value)
-	
-	if cpu.X >= byte(value) {
-		SetC(cpu, 1)
-	} else {
-		SetC(cpu, 0)
-	}
-	if cpu.X == byte(value) {
-		SetZ(cpu, 1)
-	} else {
-		SetZ(cpu, 0)
-	}
-	SetN(cpu, ((byte(tmp) >> 7) & 1))
+// CPX (Compare X Register)
+// Compares the contents of the X register with another memory held value.
+func CPX(cpu *CPU, value uint16) {
+	result := uint16(cpu.X) - value
+	SetC(cpu, BoolToByte(cpu.X >= byte(value))) // Set Carry if X >= value
+	ZeroFlag(cpu, result)                     // Update Zero Flag
+	SetN(cpu, byte(result>>7))                // Update Negative Flag
 }
 
-// This instruction compares the contents of the Y register with another memory held value and sets the zero and carry flags as appropriate.
-func CPY (cpu *CPU, value uint16) {
-	var tmp byte = cpu.Y - byte(value)
-	if cpu.Y >= byte(value) {
-		SetC(cpu, 1)
-	} else {
-		SetC(cpu, 0)
-	}
-	if cpu.Y == byte(value) {
-		SetZ(cpu, 1)
-	} else {
-		SetZ(cpu, 0)
-	}
-	SetN(cpu, ((byte(tmp) >> 7) & 1))
+// CPY (Compare Y Register)
+// Compares the contents of the Y register with another memory held value.
+func CPY(cpu *CPU, value uint16) {
+	result := uint16(cpu.Y) - value
+	SetC(cpu, BoolToByte(cpu.Y >= byte(value))) // Set Carry if Y >= value
+	ZeroFlag(cpu, result)                     // Update Zero Flag
+	SetN(cpu, byte(result>>7))                // Update Negative Flag
 }
 
-// Subtracts one from the value held at a specified memory location setting the zero and negative flags as appropriate.
-func DEC (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
-	var tmp byte = RM(cpu, cart, value)
-	tmp--
-	WM(cpu, cart, value, tmp)
-	
-	ZeroFlag(cpu, uint16(tmp))
-	SetN(cpu, ((byte(tmp) >> 7) & 1))
+// DEC (Decrement Memory)
+// Subtracts one from the value held at a specified memory location.
+func DEC(cpu *CPU, cart *cartridge.Cartridge, value uint16) {
+	memValue := RM(cpu, cart, value)
+	memValue--
+	WM(cpu, cart, value, memValue)
+	ZeroFlag(cpu, uint16(memValue)) // Update Zero Flag
+	SetN(cpu, memValue>>7)         // Update Negative Flag
 }
 
-// Subtracts one from the X register setting the zero and negative flags as appropriate.
+// DEX (Decrement X Register)
+// Subtracts one from the X register.
 func DEX(cpu *CPU) {
 	cpu.X--
-	ZeroFlag(cpu, uint16(cpu.X))
-        SetN(cpu, ((cpu.X >> 7) & 1))
+	ZeroFlag(cpu, uint16(cpu.X)) // Update Zero Flag
+	SetN(cpu, cpu.X>>7)         // Update Negative Flag
 }
 
-// Subtracts one from the Y register setting the zero and negative flags as appropriate.
+// DEY (Decrement Y Register)
+// Subtracts one from the Y register.
 func DEY(cpu *CPU) {
 	cpu.Y--
-	ZeroFlag(cpu, uint16(cpu.Y))
-        SetN(cpu, ((cpu.Y >> 7) & 1))
+	ZeroFlag(cpu, uint16(cpu.Y)) // Update Zero Flag
+	SetN(cpu, cpu.Y>>7)         // Update Negative Flag
 }
 
-// An exclusive OR is performed, bit by bit, on the accumulator contents using the contents of a byte of memory.
-func EOR (cpu *CPU, value uint16) {
-	cpu.A = cpu.A ^ byte(value)
-	ZeroFlag(cpu, uint16(cpu.A))
-        SetN(cpu, ((cpu.A >> 7) & 1))
+// EOR (Exclusive OR)
+// Performs an exclusive OR operation, bit by bit, on the accumulator contents using the contents of a byte of memory.
+func EOR(cpu *CPU, value uint16) {
+	cpu.A ^= byte(value)        // Perform bitwise XOR
+	ZeroFlag(cpu, uint16(cpu.A)) // Update Zero Flag
+	SetN(cpu, cpu.A>>7)         // Update Negative Flag
 }
 
-// Adds one to the value held at a specified memory location setting the zero and negative flags as appropriate.
-func INC (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
-	
-	var tmp byte = RM(cpu, cart, value)
-	tmp++
-	WM(cpu, cart, value, tmp)
-	
-	ZeroFlag(cpu, uint16(tmp))
-	SetN(cpu, ((byte(tmp) >> 7) & 1))
+// INC (Increment Memory)
+// Adds one to the value held at a specified memory location.
+func INC(cpu *CPU, cart *cartridge.Cartridge, value uint16) {
+	memValue := RM(cpu, cart, value)
+	memValue++
+	WM(cpu, cart, value, memValue)
+	ZeroFlag(cpu, uint16(memValue)) // Update Zero Flag
+	SetN(cpu, memValue>>7)         // Update Negative Flag
 }
 
-// Adds one to the X register setting the zero and negative flags as appropriate.
-func INX (cpu *CPU) {
+// INX (Increment X Register)
+// Adds one to the X register.
+func INX(cpu *CPU) {
 	cpu.X++
-	ZeroFlag(cpu, uint16(cpu.X))
-	SetN(cpu, ((byte(cpu.X) >> 7) & 1))
+	ZeroFlag(cpu, uint16(cpu.X)) // Update Zero Flag
+	SetN(cpu, cpu.X>>7)         // Update Negative Flag
 }
 
-
-// Adds one to the Y register setting the zero and negative flags as appropriate.
-func INY (cpu *CPU) {
+// INY (Increment Y Register)
+// Adds one to the Y register.
+func INY(cpu *CPU) {
 	cpu.Y++
-	ZeroFlag(cpu, uint16(cpu.Y))
-	SetN(cpu, ((byte(cpu.Y) >> 7) & 1))
+	ZeroFlag(cpu, uint16(cpu.Y)) // Update Zero Flag
+	SetN(cpu, cpu.Y>>7)         // Update Negative Flag
 }
 
-
+// JMP (Jump)
 // Sets the program counter to the address specified by the operand.
 func JMP(cpu *CPU, value uint16) {
 	cpu.PC = value
 }
 
-
-// Loads a byte of memory into the accumulator setting the zero and negative flags as appropriate.
+// LDA (Load Accumulator)
+// Loads a byte of memory into the accumulator.
 func LDA(cpu *CPU, value uint16) {
 	cpu.A = byte(value)
-	ZeroFlag(cpu, uint16(cpu.A))
-	SetN(cpu, ((cpu.A >> 7) & 1) )
+	ZeroFlag(cpu, uint16(cpu.A)) // Update Zero Flag
+	SetN(cpu, cpu.A>>7)         // Update Negative Flag
 }
 
-// Loads a byte of memory into the X register setting the zero and negative flags as appropriate.
+// LDX (Load X Register)
+// Loads a byte of memory into the X register.
 func LDX(cpu *CPU, value uint16) {
 	cpu.X = byte(value)
-	ZeroFlag(cpu, uint16(cpu.X))
-        SetN(cpu, ((cpu.X >> 7) & 1))
+	ZeroFlag(cpu, uint16(cpu.X)) // Update Zero Flag
+	SetN(cpu, cpu.X>>7)         // Update Negative Flag
 }
 
-// Loads a byte of memory into the Y register setting the zero and negative flags as appropriate.
-func LDY (cpu *CPU, value uint16) {
+// LDY (Load Y Register)
+// Loads a byte of memory into the Y register.
+func LDY(cpu *CPU, value uint16) {
 	cpu.Y = byte(value)
-	ZeroFlag(cpu, uint16(cpu.Y))
-        SetN(cpu, ((cpu.Y >> 7) & 1))
+	ZeroFlag(cpu, uint16(cpu.Y)) // Update Zero Flag
+	SetN(cpu, cpu.Y>>7)         // Update Negative Flag
 }
 
-
-// LSR_A performs Logical Shift Right on the Accumulator.
-// It shifts all bits in A one position to the right.
-// Bit 0 is moved into the Carry flag, and bit 7 is set to 0.
-// Flags affected: C, Z, N
+// LSR_A (Logical Shift Right - Accumulator)
+// Shifts all bits in the accumulator one position to the right.
 func LSR_A(cpu *CPU) {
-    // Set Carry flag to bit 0 before shifting
-    SetC(cpu, cpu.A & 0x01)
-
-    // Shift Accumulator right by 1
-    cpu.A >>= 1
-
-    // Set Zero flag if result is zero
-    ZeroFlag(cpu, uint16(cpu.A))
-
-    // Clear Negative flag since bit 7 is always 0 after LSR
-    SetN(cpu, 0)
+	SetC(cpu, cpu.A&1)          // Set Carry Flag to the original bit 0 of A
+	cpu.A >>= 1                // Shift A right by 1 bit
+	ZeroFlag(cpu, uint16(cpu.A)) // Update Zero Flag
+	SetN(cpu, 0)                // Clear Negative Flag (bit 7 is always 0 after LSR)
 }
 
-// LSR_M performs Logical Shift Right on a memory address.
-// It shifts all bits in the memory location one position to the right.
-// Bit 0 is moved into the Carry flag, and bit 7 is set to 0.
-// Flags affected: C, Z, N
+// LSR_M (Logical Shift Right - Memory)
+// Shifts all bits in the memory location one position to the right.
 func LSR_M(cpu *CPU, cart *cartridge.Cartridge, address uint16) {
-    // Read the current value from memory
-    value := RM(cpu, cart, address)
-
-    // Set Carry flag to bit 0 before shifting
-    SetC(cpu, value & 0x01)
-
-    // Shift right by 1
-    shifted := value >> 1
-
-    // Write the shifted value back to memory
-    WM(cpu, cart, address, shifted)
-
-    // Set Zero flag if result is zero
-    ZeroFlag(cpu, uint16(shifted))
-
-    // Clear Negative flag since bit 7 is always 0 after LSR
-    SetN(cpu, 0)
+	value := RM(cpu, cart, address) // Read the value from memory
+	SetC(cpu, value&1)          // Set Carry Flag to the original bit 0
+	value >>= 1                // Shift the value right by 1 bit
+	WM(cpu, cart, address, value)   // Write the shifted value back to memory
+	ZeroFlag(cpu, uint16(value)) // Update Zero Flag
+	SetN(cpu, 0)                // Clear Negative Flag (bit 7 is always 0 after LSR)
 }
 
-
-// The NOP instruction causes no changes to the processor other than the normal incrementing of the program counter to the next instruction.
+// NOP (No Operation)
+// The NOP instruction causes no changes to the processor other than the normal incrementing of the program counter.
 func NOP() {
+	// Do nothing
 }
 
-// An inclusive OR is performed, bit by bit, on the accumulator contents using the contents of a byte of memory.
-func ORA (cpu *CPU, value uint16) {
-	cpu.A = cpu.A | byte(value)
-	ZeroFlag(cpu, uint16(cpu.A))
-        SetN(cpu, ((cpu.A >> 7) & 1))
+// ORA (Logical Inclusive OR)
+// Performs an inclusive OR operation, bit by bit, on the accumulator contents using the contents of a byte of memory.
+func ORA(cpu *CPU, value uint16) {
+	cpu.A |= byte(value)        // Perform bitwise OR
+	ZeroFlag(cpu, uint16(cpu.A)) // Update Zero Flag
+	SetN(cpu, cpu.A>>7)         // Update Negative Flag
 }
 
-// Pulls an 8 bit value from the stack and into the accumulator. The zero and negative flags are set as appropriate.
-func PLA (cpu *CPU) {
+// PLA (Pull Accumulator)
+// Pulls an 8-bit value from the stack and into the accumulator.
+func PLA(cpu *CPU) {
 	cpu.A = PopMemory(cpu)
-	ZeroFlag(cpu, uint16(cpu.A))
-        SetN(cpu, ((cpu.A >> 7) & 1))
-	
+	ZeroFlag(cpu, uint16(cpu.A)) // Update Zero Flag
+	SetN(cpu, cpu.A>>7)         // Update Negative Flag
 }
 
-// Pushes a copy of the accumulator on to the stack.
-func PHA (cpu *CPU) {
+// PHA (Push Accumulator)
+// Pushes a copy of the accumulator onto the stack.
+func PHA(cpu *CPU) {
 	PushMemory(cpu, cpu.A)
 }
 
-
-// C824  48        PHA                             A:FF X:00 Y:00 P:AD SP:FB CYC: 86 SL:243
-// C825  28        PLP                             A:FF X:00 Y:00 P:AD SP:FA CYC: 95 SL:243
-// C826  D0 09     BNE $C831                       A:FF X:00 Y:00 P:EF SP:FB CYC:107 SL:243
-
-// Pushes a copy of the status flags on to the stack.
-func PHP (cpu *CPU) {
-	PushMemory(cpu, SetBit(SetBit(cpu.P, 4, 1), 5, 1) )
+// PHP (Push Processor Status)
+// Pushes a copy of the status flags onto the stack.
+func PHP(cpu *CPU) {
+	// Bit 4 (B flag) and Bit 5 (always 1) are set to 1 when pushing to the stack.
+	PushMemory(cpu, SetBit(SetBit(cpu.P, 4, 1), 5, 1))
 }
 
-// Pulls an 8 bit value from the stack and into the processor flags. The flags will take on new states as determined by the value pulled.
+// PLP (Pull Processor Status)
 // Pulls an 8-bit value from the stack and into the processor flags.
-// Ensures that Bit 5 is always set and Bit 4 (Break) is cleared.
 func PLP(cpu *CPU) {
-    var all byte = PopMemory(cpu)
-    // Clear Bit 4 (Break Flag) and ensure Bit 5 is set
-    newP := (all & 0xEF) | 0x20 // 0xEF = 11101111, 0x20 = 00100000
-    SetP(cpu, newP)
+	status := PopMemory(cpu)
+	// Bit 4 (B flag) is cleared, and Bit 5 (always 1) is set when pulling from the stack.
+	SetP(cpu, (status&0xEF)|0x20)
 }
 
-// Move each of the bits in either A or M one place to the right. Bit 7 is filled with the current value of the carry flag whilst the old bit 0 becomes the new carry flag value.
+// ROR (Rotate Right)
+// Moves each of the bits in either A or M one place to the right.
 func ROR(cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
-    var result byte
-    var tmp byte
+	var result byte
+	var tmp byte
 
-    switch op {
-    case 0x66, 0x6E, 0x76, 0x7E: // Memory Addressing Modes
-        result = RM(cpu, cart, value)
-        tmp = result & 0x1
-        result = (result >> 1) | (FlagC(cpu) << 7)
-        WM(cpu, cart, value, result)
-    case 0x6A: // Accumulator
-        tmp = cpu.A & 0x1
-        cpu.A = (cpu.A >> 1) | (FlagC(cpu) << 7)
-        result = cpu.A
-    default:
-        return
-    }
+	switch op {
+	case 0x66, 0x6E, 0x76, 0x7E: // Memory Addressing Modes
+		result = RM(cpu, cart, value)
+		tmp = result & 0x1                                 // Store original bit 0
+		result = (result >> 1) | (FlagC(cpu) << 7)         // Rotate right, inserting carry into bit 7
+		WM(cpu, cart, value, result)                      // Write the result back to memory
+	case 0x6A: // Accumulator
+		tmp = cpu.A & 0x1                                  // Store original bit 0
+		cpu.A = (cpu.A >> 1) | (FlagC(cpu) << 7)           // Rotate right, inserting carry into bit 7
+		result = cpu.A
+	default:
+		return
+	}
 
-    // Set Flags
-    SetC(cpu, tmp)
-    ZeroFlag(cpu, uint16(result)) // Corrected line
-    SetN(cpu, (result>>7)&1)
+	SetC(cpu, tmp)              // Set Carry to the original bit 0
+	ZeroFlag(cpu, uint16(result)) // Update Zero Flag
+	SetN(cpu, result>>7)        // Update Negative Flag
 }
 
-// Move each of the bits in either A or M one place to the left. Bit 0 is filled with the current value of the carry flag whilst the old bit 7 becomes the new carry flag value.
+// ROL (Rotate Left)
+// Moves each of the bits in either A or M one place to the left.
 func ROL(cpu *CPU, cart *cartridge.Cartridge, value uint16, op byte) {
-    var result byte
-    var tmp byte
+	var result byte
+	var tmp byte
 
-    switch op {
-    case 0x26, 0x2E, 0x36, 0x3E: // Memory Addressing Modes
-        result = RM(cpu, cart, value)
-        tmp = (result >> 7) & 0x1
-        result = (result << 1) | FlagC(cpu)
-        WM(cpu, cart, value, result)
-    case 0x2A: // Accumulator
-        tmp = (cpu.A >> 7) & 0x1
-        cpu.A = (cpu.A << 1) | FlagC(cpu)
-        result = cpu.A
-    default:
-        // Handle unknown opcode or raise an error
-        return
-    }
+	switch op {
+	case 0x26, 0x2E, 0x36, 0x3E: // Memory Addressing Modes
+		result = RM(cpu, cart, value)
+		tmp = (result >> 7) & 0x1                         // Store original bit 7
+		result = (result << 1) | FlagC(cpu)               // Rotate left, inserting carry into bit 0
+		WM(cpu, cart, value, result)                      // Write the result back to memory
+	case 0x2A: // Accumulator
+		tmp = (cpu.A >> 7) & 0x1                          // Store original bit 7
+		cpu.A = (cpu.A << 1) | FlagC(cpu)                 // Rotate left, inserting carry into bit 0
+		result = cpu.A
+	default:
+		return
+	}
 
-    // Set Flags
-    SetC(cpu, tmp)
-    ZeroFlag(cpu, uint16(result)) // Corrected line
-    SetN(cpu, (result>>7)&1)
+	SetC(cpu, tmp)              // Set Carry to the original bit 7
+	ZeroFlag(cpu, uint16(result)) // Update Zero Flag
+	SetN(cpu, result>>7)        // Update Negative Flag
 }
 
-
-// This instruction subtracts the contents of a memory location to the accumulator together with the not of the carry bit. If overflow occurs the carry bit is clear, this enables multiple byte subtraction to be performed.
-// Obs: sbc(x) = adc(255-x)
+// SBC (Subtract with Carry)
+// Subtracts the contents of a memory location from the accumulator together with the NOT of the carry bit.
 func SBC(cpu *CPU, value uint16) {
-    // Cast the value to byte to handle 8-bit operations
-    m := byte(value & 0xFF)
-
-    // Retrieve the current state of the carry flag (1 if set, 0 if clear)
-    carry := FlagC(cpu)
-
-    // Perform the subtraction: A - M - (1 - C)
-    // This is equivalent to A + (~M) + C
-    a := uint16(cpu.A)
-    tmp := a + uint16(^m) + uint16(carry)
-
-    // Set the Carry flag:
-    // In subtraction, the Carry flag is set if no borrow occurred (A >= M + (1 - C))
-    if tmp > 0xFF {
-        SetC(cpu, 1)
-    } else {
-        SetC(cpu, 0)
-    }
-
-    // Compute the 8-bit result
-    result := byte(tmp & 0xFF)
-
-    // Set the Zero flag if the result is zero
-    if result == 0 {
-        SetZ(cpu, 1)
-    } else {
-        SetZ(cpu, 0)
-    }
-
-    // Set the Negative flag based on the most significant bit of the result
-    SetN(cpu, (result>>7)&1)
-
-    // Set the Overflow flag
-    // Overflow occurs if the sign of A and M are different and the sign of A and result are different
-    if (((cpu.A ^ m) & 0x80) != 0) && (((cpu.A ^ result) & 0x80) != 0) {
-        SetV(cpu, 1)
-    } else {
-        SetV(cpu, 0)
-    }
-
-    // Update the accumulator with the result
-    cpu.A = result
+	// SBC is equivalent to ADC of the two's complement of the value
+	val := byte(value)
+	complement := ^val
+	ADC(cpu, complement)
 }
 
-
-// Set the carry flag to one.
+// SEC (Set Carry Flag)
+// Sets the carry flag to one.
 func SEC(cpu *CPU) {
 	SetC(cpu, 1)
 }
 
-// Set the decimal mode flag to one.
+// SED (Set Decimal Flag)
+// Sets the decimal mode flag to one.
 func SED(cpu *CPU) {
 	SetD(cpu, 1)
 }
 
-// Set the interrupt disable flag to one.
+// SEI (Set Interrupt Disable)
+// Sets the interrupt disable flag to one.
 func SEI(cpu *CPU) {
 	SetI(cpu, 1)
 }
 
-// Stores the contents of the A register into memory
-func STA (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
+// STA (Store Accumulator)
+// Stores the contents of the accumulator into memory.
+func STA(cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 	WM(cpu, cart, value, cpu.A)
 }
 
-// Stores the contents of the X register into memory
-func STX (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
+// STX (Store X Register)
+// Stores the contents of the X register into memory.
+func STX(cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 	WM(cpu, cart, value, cpu.X)
 }
 
-// Stores the contents of the Y register into memory
-func STY (cpu *CPU, cart *cartridge.Cartridge, value uint16) {
+// STY (Store Y Register)
+// Stores the contents of the Y register into memory.
+func STY(cpu *CPU, cart *cartridge.Cartridge, value uint16) {
 	WM(cpu, cart, value, cpu.Y)
 }
 
-
-//Copies the current contents of the accumulator into the X register and sets the zero and negative flags as appropriate.
-func TAX (cpu *CPU) {
+// TAX (Transfer Accumulator to X)
+// Copies the current contents of the accumulator into the X register.
+func TAX(cpu *CPU) {
 	cpu.X = cpu.A
-	ZeroFlag(cpu, uint16(cpu.X))
-        SetN(cpu, ((cpu.X >> 7) & 1))
+	ZeroFlag(cpu, uint16(cpu.X)) // Update Zero Flag
+	SetN(cpu, cpu.X>>7)         // Update Negative Flag
 }
 
-// Copies the current contents of the accumulator into the Y register and sets the zero and negative flags as appropriate.
-func TAY (cpu *CPU) {
+// TAY (Transfer Accumulator to Y)
+// Copies the current contents of the accumulator into the Y register.
+func TAY(cpu *CPU) {
 	cpu.Y = cpu.A
-	ZeroFlag(cpu, uint16(cpu.Y))
-        SetN(cpu, ((cpu.Y >> 7) & 1))
+	ZeroFlag(cpu, uint16(cpu.Y)) // Update Zero Flag
+	SetN(cpu, cpu.Y>>7)         // Update Negative Flag
 }
 
-// Copies the current contents of the stack register into the X register and sets the zero and negative flags as appropriate.
-func TSX (cpu *CPU) {
+// TSX (Transfer Stack Pointer to X)
+// Copies the current contents of the stack pointer into the X register.
+func TSX(cpu *CPU) {
 	cpu.X = cpu.SP
-	ZeroFlag(cpu, uint16(cpu.X))
-        SetN(cpu, ((cpu.X >> 7) & 1))
+	ZeroFlag(cpu, uint16(cpu.X)) // Update Zero Flag
+	SetN(cpu, cpu.X>>7)         // Update Negative Flag
 }
 
-// Copies the current contents of the X register into the accumulator and sets the zero and negative flags as appropriate.
-func TXA (cpu *CPU) {
+// TXA (Transfer X to Accumulator)
+// Copies the current contents of the X register into the accumulator.
+func TXA(cpu *CPU) {
 	cpu.A = cpu.X
-	ZeroFlag(cpu, uint16(cpu.A))
-        SetN(cpu, ((cpu.A >> 7) & 1))
+	ZeroFlag(cpu, uint16(cpu.A)) // Update Zero Flag
+	SetN(cpu, cpu.A>>7)         // Update Negative Flag
 }
 
-// Copies the current contents of the X register into the stack register.
-func TXS (cpu *CPU) {
+// TXS (Transfer X to Stack Pointer)
+// Copies the current contents of the X register into the stack pointer.
+func TXS(cpu *CPU) {
 	cpu.SP = cpu.X
 }
 
-// Copies the current contents of the Y register into the accumulator and sets the zero and negative flags as appropriate.
-func TYA (cpu *CPU) {
+// TYA (Transfer Y to Accumulator)
+// Copies the current contents of the Y register into the accumulator.
+func TYA(cpu *CPU) {
 	cpu.A = cpu.Y
-	ZeroFlag(cpu, uint16(cpu.A))
-        SetN(cpu, ((cpu.A >> 7) & 1))
+	ZeroFlag(cpu, uint16(cpu.A)) // Update Zero Flag
+	SetN(cpu, cpu.A>>7)         // Update Negative Flag
 }
-// The RTS instruction is used at the end of a subroutine to return to the calling routine.
-// It pulls the program counter (minus one) from the stack and increments it to the return address.
+
+// RTS (Return from Subroutine)
+// Returns from a subroutine by pulling the program counter from the stack.
 func RTS(cpu *CPU) {
-    returnAddress := PopWord(cpu)
-    returnAddress = (returnAddress + 1) & 0xFFFF
-    cpu.PC = returnAddress
+	cpu.PC = PopWord(cpu) + 1 // Pull PC from stack and increment by 1
 }
 
-// The JSR instruction pushes the address (minus one) of the return point onto the stack 
-// and then sets the program counter to the target memory address.
+// JSR (Jump to Subroutine)
 func JSR(cpu *CPU, value uint16) {
-    returnAddress := (cpu.PC + 2) & 0xFFFF
-    PushWord(cpu, returnAddress)
-    cpu.PC = value
+    PushWord(cpu, cpu.PC + 2) // Push the address of the next instruction (which is current PC + 2 since we are at the last byte of the JSR instruction)
+    cpu.PC = value           // Set PC to the subroutine address
 }
 
-// The BRK instruction forces the generation of an interrupt request. The program counter and processor status are pushed on the stack then the IRQ interrupt vector at $FFFE/F is loaded into the PC and the break flag in the status set to one.
+
+// BRK (Force Interrupt)
+// Forces the generation of an interrupt request.
 func BRK(cpu *CPU, cart *cartridge.Cartridge) {
-    returnAddress := (cpu.PC + 2) & 0xFFFF
-    PushWord(cpu, returnAddress)
-    statusWithBreak := cpu.P | 0x10 // Set bit 4 (B flag)
-    PushMemory(cpu, statusWithBreak)
-    SetI(cpu, 1)
-    low := RM(cpu, cart, 0xFFFE)
-    high := RM(cpu, cart, 0xFFFF)
-    cpu.PC = LE(low, high)
+	PushWord(cpu, cpu.PC+1)        // Push PC + 1 (return address after BRK) onto the stack
+	PHP(cpu)                       // Push processor status with B flag set to 1
+	SEI(cpu)                       // Set Interrupt Disable to prevent further interrupts
+	cpu.PC = LE(RM(cpu, cart, 0xFFFE), RM(cpu, cart, 0xFFFF)) // Load PC from interrupt vector
+}
+
+// RTI (Return from Interrupt)
+// Returns from an interrupt by pulling the processor status and program counter from the stack.
+func RTI(cpu *CPU) {
+	PLP(cpu)           // Pull processor status from the stack
+	cpu.PC = PopWord(cpu) // Pull PC from the stack
 }
 
 
-// The RTI instruction is used at the end of an interrupt processing routine. It pulls the processor flags from the stack followed by the program counter.
-// Pulls an 8-bit value from the stack and into the processor flags.
-// Ensures that Bit 5 is always set and Bit 4 (Break) is cleared.
-func RTI(cpu *CPU) {
-    cpu.P = PopMemory(cpu)
-    cpu.P = (cpu.P & 0xEF) | 0x20 // Clear bit 4, set bit 5
-    cpu.PC = PopWord(cpu)
+func BoolToByte(b bool) byte {
+    if b {
+        return 1
+    }
+    return 0
 }

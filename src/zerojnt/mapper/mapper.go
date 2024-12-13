@@ -1,287 +1,407 @@
 package mapper
 
 import (
-    "fmt"
-    "log"
-    "zerojnt/cartridge"
+	"fmt"
+	"log"
+	"zerojnt/cartridge"
 )
 
+// Memory bank size constants
 const (
-    PRG_BANK_SIZE uint32 = 16384 // 16KB
-    CHR_BANK_SIZE uint32 = 8192  // 8KB
+	PRG_BANK_SIZE uint32 = 16384 // 16KB PRG ROM bank size
+	CHR_BANK_SIZE uint32 = 8192  // 8KB CHR ROM/RAM bank size
+	SRAM_SIZE     uint32 = 8192  // 8KB SRAM size
 )
 
-// MMC1State holds the internal state of the MMC1 mapper.
+// MMC1 control register bits
+const (
+	MMC1_CHR_MODE_8K  = 0x00
+	MMC1_CHR_MODE_4K  = 0x10
+	MMC1_PRG_MODE_32K = 0x00
+	MMC1_PRG_MODE_FIRST_FIXED = 0x08
+	MMC1_PRG_MODE_LAST_FIXED  = 0x0C
+	MMC1_MIRROR_SINGLE_LOWER = 0x00
+	MMC1_MIRROR_SINGLE_UPPER = 0x01
+	MMC1_MIRROR_VERTICAL     = 0x02
+	MMC1_MIRROR_HORIZONTAL   = 0x03
+)
+
+// MMC1State represents the internal state of the MMC1 mapper
 type MMC1State struct {
-    ShiftRegister byte   // 5-bit shift register
-    WriteCount    byte   // Number of writes to shift register
-    Control       byte   // Control register (PRG mode, CHR mode, mirroring)
-    CHRBank0      byte   // CHR bank 0 selection
-    CHRBank1      byte   // CHR bank 1 selection (used in 4KB mode)
-    PRGBank       byte   // PRG bank selection
-    PRGMode       byte // PRG ROM bank mode (affects how PRGBank is used)
-    CHRMode       byte   // CHR ROM bank mode (0: 8KB, 1: 4KB)
+	ShiftRegister  byte  // 5-bit shift register for serial port
+	WriteCount     byte  // Tracks number of writes (0-4) to shift register
+	Control        byte  // Control register ($8000-$9FFF)
+	CHRBank0       byte  // CHR bank 0 register ($A000-$BFFF)
+	CHRBank1       byte  // CHR bank 1 register ($C000-$DFFF)
+	PRGBank        byte  // PRG bank register ($E000-$FFFF)
+	PRGRAMEnable   bool  // PRG RAM enable flag (MMC1B and later)
+	LastWriteCycle uint  // Cycle count of the last write (for consecutive write detection)
+	MMC1Revision   uint8 // To distinguish between MMC1A (0) and MMC1B (1) and later
 }
 
+// Global MMC1 state
 var mmc1 MMC1State
 
+// MapperError represents mapper-specific errors
+type MapperError struct {
+	Operation string
+	Message   string
+}
+
+func (e *MapperError) Error() string {
+	return fmt.Sprintf("Mapper Error during %s: %s", e.Operation, e.Message)
+}
+
+// init initializes the MMC1 mapper state when the package is loaded
 func init() {
-    resetMMC1()
+	resetMMC1()
 }
 
-// resetMMC1 initializes the MMC1 mapper to its default state.
+// resetMMC1 resets the MMC1 mapper to its power-on state
 func resetMMC1() {
-    mmc1.ShiftRegister = 0x10  // Start with shift register in reset state (bit 4 set)
-    mmc1.WriteCount = 0
-    mmc1.Control = 0x0C      // PRG ROM bank mode 3 (fixed last bank, variable first bank)
-    mmc1.CHRBank0 = 0
-    mmc1.CHRBank1 = 0
-    mmc1.PRGBank = 0
-    mmc1.PRGMode = 3
-    mmc1.CHRMode = 0  // 8KB CHR mode
-
-    fmt.Printf("MMC1: Reset state - Control: %02X, PRGMode: %d, CHRMode: %d\n",
-        mmc1.Control, mmc1.PRGMode, mmc1.CHRMode)
+	mmc1.ShiftRegister = 0x10
+	mmc1.WriteCount = 0
+	mmc1.Control = MMC1_PRG_MODE_LAST_FIXED // PRG mode 3, CHR mode 0, Single-screen lower bank
+	mmc1.CHRBank0 = 0
+	mmc1.CHRBank1 = 0
+	mmc1.PRGBank = 0
+	mmc1.PRGRAMEnable = false // Default to disabled for compatibility
+	mmc1.LastWriteCycle = 0
+	mmc1.MMC1Revision = 1 // Default to MMC1B behavior
 }
 
-// updateBankMapping updates the PRG and CHR ROM bank mapping based on the current MMC1 state.
-func updateBankMapping(cart *cartridge.Cartridge) {
-    if len(cart.OriginalPRG) == 0 {
-        log.Fatal("OriginalPRG is empty - ROM data wasn't properly loaded")
-        return
-    }
+// updateBankMapping updates PRG and CHR ROM bank mapping based on current MMC1 state
+func updateBankMapping(cart *cartridge.Cartridge) error {
+	if len(cart.OriginalPRG) == 0 {
+		return &MapperError{"updateBankMapping", "OriginalPRG is empty - ROM data wasn't properly loaded"}
+	}
 
-    numPRGBanks := uint32(len(cart.OriginalPRG)) / PRG_BANK_SIZE
-    if numPRGBanks == 0 {
-        log.Fatal("Invalid PRG ROM size")
-        return
-    }
+	numPRGBanks := uint32(len(cart.OriginalPRG)) / PRG_BANK_SIZE
+	if numPRGBanks == 0 {
+		return &MapperError{"updateBankMapping", "Invalid PRG ROM size"}
+	}
 
-    // Ensure PRG space is 32KB for MMC1
-    if len(cart.PRG) != 32768 {
-        cart.PRG = make([]byte, 32768)
-    }
+	if len(cart.PRG) != 32768 {
+		cart.PRG = make([]byte, 32768)
+	}
 
-    // PRG ROM bank mapping
-    switch mmc1.PRGMode {
-    case 0, 1: // 32KB switching
-        // Ignore lowest bit of PRG bank selection in this mode
-        bankBase := uint32(mmc1.PRGBank & 0x0E) % numPRGBanks
-        copy(cart.PRG[0:16384], cart.OriginalPRG[bankBase*PRG_BANK_SIZE:(bankBase+1)*PRG_BANK_SIZE])
-        copy(cart.PRG[16384:32768], cart.OriginalPRG[(bankBase+1)*PRG_BANK_SIZE:(bankBase+2)*PRG_BANK_SIZE])
+	if err := updatePRGBanks(cart, numPRGBanks); err != nil {
+		return err
+	}
 
-    case 2: // Fixed first bank, switchable last bank
-        // First bank is fixed at 0
-        copy(cart.PRG[0:16384], cart.OriginalPRG[0:16384])
-        // Last bank is switchable
-        bankNum := uint32(mmc1.PRGBank) % numPRGBanks
-        copy(cart.PRG[16384:32768], cart.OriginalPRG[bankNum*PRG_BANK_SIZE:(bankNum+1)*PRG_BANK_SIZE])
+	if err := updateCHRBanks(cart); err != nil {
+		return err
+	}
 
-    case 3: // Switchable first bank, fixed last bank
-        // First bank is switchable
-        bankNum := uint32(mmc1.PRGBank) % numPRGBanks
-        copy(cart.PRG[0:16384], cart.OriginalPRG[bankNum*PRG_BANK_SIZE:(bankNum+1)*PRG_BANK_SIZE])
-        // Last bank is fixed to the last bank
-        copy(cart.PRG[16384:32768], cart.OriginalPRG[(numPRGBanks-1)*PRG_BANK_SIZE:numPRGBanks*PRG_BANK_SIZE])
-    }
-
-    // CHR ROM/RAM bank mapping (only if CHR ROM/RAM is present)
-    numCHRBanks := uint32(len(cart.OriginalCHR)) / CHR_BANK_SIZE
-    if numCHRBanks > 0 {
-        if mmc1.CHRMode == 0 {
-            // 8KB switching
-            bankBase := uint32(mmc1.CHRBank0 & 0xFE) % numCHRBanks
-            if (bankBase+2)*CHR_BANK_SIZE <= uint32(len(cart.OriginalCHR)){
-               copy(cart.CHR[0:8192], cart.OriginalCHR[bankBase*CHR_BANK_SIZE:(bankBase+2)*CHR_BANK_SIZE])
-            }
-        } else {
-            // 4KB switching
-            bank0 := uint32(mmc1.CHRBank0) % numCHRBanks
-            bank1 := uint32(mmc1.CHRBank1) % numCHRBanks
-            if (bank0+1)*4096 <= uint32(len(cart.OriginalCHR)) {
-               copy(cart.CHR[0:4096], cart.OriginalCHR[bank0*4096:(bank0+1)*4096])
-            }
-            if (bank1+1)*4096 <= uint32(len(cart.OriginalCHR)){
-               copy(cart.CHR[4096:8192], cart.OriginalCHR[bank1*4096:(bank1+1)*4096])
-            }
-        }
-    }
+	return nil
 }
 
-// MMC1Write handles writes to the MMC1 mapper's registers.
+// updatePRGBanks handles PRG ROM bank switching based on current mode
+func updatePRGBanks(cart *cartridge.Cartridge, numPRGBanks uint32) error {
+	prgMode := mmc1.Control & MMC1_PRG_MODE_LAST_FIXED
+
+	// Handle PRG RAM enabling/disabling for MMC1B and later
+	if mmc1.MMC1Revision > 0 && !mmc1.PRGRAMEnable {
+		// PRG RAM is disabled, do not map
+		return nil
+	}
+
+	switch prgMode {
+	case MMC1_PRG_MODE_32K, MMC1_PRG_MODE_FIRST_FIXED: // 32KB switching mode
+		bankBase := uint32(mmc1.PRGBank&0x0E) * PRG_BANK_SIZE
+		if bankBase >= uint32(len(cart.OriginalPRG)) {
+			bankBase = (uint32(len(cart.OriginalPRG)) - 2*PRG_BANK_SIZE) % (numPRGBanks * PRG_BANK_SIZE)
+		}
+		if bankBase+2*PRG_BANK_SIZE > uint32(len(cart.OriginalPRG)) {
+			return &MapperError{"updatePRGBanks", "PRG bank out of bounds in 32KB mode"}
+		}
+		copy(cart.PRG[0:16384], cart.OriginalPRG[bankBase:bankBase+PRG_BANK_SIZE])
+		copy(cart.PRG[16384:32768], cart.OriginalPRG[bankBase+PRG_BANK_SIZE:bankBase+2*PRG_BANK_SIZE])
+
+	case MMC1_PRG_MODE_LAST_FIXED: // Switchable first bank, fixed last bank
+		// In MMC1A, bit 3 selects 16KB bank at $8000 if '0', and controls PRG A17 if '1'.
+		if mmc1.MMC1Revision == 0 && (mmc1.PRGBank&0x08) != 0 {
+			// MMC1A with bit 3 set in PRG bank register
+			bankNum := uint32(mmc1.PRGBank&0x07) * PRG_BANK_SIZE // Ignore bit 3
+			if bankNum >= uint32(len(cart.OriginalPRG)) {
+				bankNum = (uint32(len(cart.OriginalPRG)) - PRG_BANK_SIZE) % (numPRGBanks * PRG_BANK_SIZE)
+			}
+			if bankNum+PRG_BANK_SIZE > uint32(len(cart.OriginalPRG)) {
+				return &MapperError{"updatePRGBanks", "PRG bank out of bounds in MMC1A fixed-last mode"}
+			}
+			copy(cart.PRG[0:8192], cart.OriginalPRG[bankNum:bankNum+8192])
+			copy(cart.PRG[8192:16384], cart.OriginalPRG[bankNum+8192:bankNum+PRG_BANK_SIZE])
+
+			lastBankStart := (numPRGBanks - 1) * PRG_BANK_SIZE
+			copy(cart.PRG[16384:24576], cart.OriginalPRG[lastBankStart:lastBankStart+8192])
+			copy(cart.PRG[24576:32768], cart.OriginalPRG[lastBankStart+8192:lastBankStart+PRG_BANK_SIZE])
+		} else {
+			// MMC1B behavior or MMC1A with bit 3 clear
+			bankNum := uint32(mmc1.PRGBank&0x0F) * PRG_BANK_SIZE
+			if bankNum >= uint32(len(cart.OriginalPRG)) {
+				bankNum = (uint32(len(cart.OriginalPRG)) - PRG_BANK_SIZE) % (numPRGBanks * PRG_BANK_SIZE)
+			}
+			if bankNum+PRG_BANK_SIZE > uint32(len(cart.OriginalPRG)) {
+				return &MapperError{"updatePRGBanks", "PRG bank out of bounds in fixed-last mode"}
+			}
+			copy(cart.PRG[0:16384], cart.OriginalPRG[bankNum:bankNum+PRG_BANK_SIZE])
+
+			lastBankStart := (numPRGBanks - 1) * PRG_BANK_SIZE
+			copy(cart.PRG[16384:32768], cart.OriginalPRG[lastBankStart:lastBankStart+PRG_BANK_SIZE])
+		}
+	}
+
+	return nil
+}
+
+// updateCHRBanks handles CHR ROM/RAM bank switching
+func updateCHRBanks(cart *cartridge.Cartridge) error {
+	chrMode := mmc1.Control & MMC1_CHR_MODE_4K
+
+	// Handle no CHR data case (use 8KB CHR RAM)
+	if len(cart.OriginalCHR) == 0 {
+		if len(cart.CHR) != 8192 {
+			cart.CHR = make([]byte, 8192)
+		}
+		return nil
+	}
+
+	numCHRBanks := uint32(len(cart.OriginalCHR)) / CHR_BANK_SIZE
+	if numCHRBanks == 0 {
+		return &MapperError{"updateCHRBanks", "Invalid CHR ROM size"}
+	}
+
+	if chrMode == MMC1_CHR_MODE_8K {
+		// 8KB CHR ROM mode
+		bankBase := uint32(mmc1.CHRBank0&0xFE) * CHR_BANK_SIZE
+		if bankBase >= uint32(len(cart.OriginalCHR)) {
+			bankBase = (uint32(len(cart.OriginalCHR)) - CHR_BANK_SIZE) % (numCHRBanks * CHR_BANK_SIZE)
+		}
+		if bankBase+CHR_BANK_SIZE > uint32(len(cart.OriginalCHR)) {
+			return &MapperError{"updateCHRBanks", "CHR bank out of bounds in 8KB mode"}
+		}
+		copy(cart.CHR[0:8192], cart.OriginalCHR[bankBase:bankBase+CHR_BANK_SIZE])
+	} else {
+		// 4KB CHR ROM mode
+		bank0 := uint32(mmc1.CHRBank0) * CHR_BANK_SIZE / 2
+		bank1 := uint32(mmc1.CHRBank1) * CHR_BANK_SIZE / 2
+
+		if bank0 >= uint32(len(cart.OriginalCHR)) {
+			bank0 = (uint32(len(cart.OriginalCHR))) % (numCHRBanks * CHR_BANK_SIZE / 2)
+		}
+		if bank1 >= uint32(len(cart.OriginalCHR)) {
+			bank1 = (uint32(len(cart.OriginalCHR))) % (numCHRBanks * CHR_BANK_SIZE / 2)
+		}
+		if bank0+CHR_BANK_SIZE/2 > uint32(len(cart.OriginalCHR)) {
+			return &MapperError{"updateCHRBanks", "CHR bank 0 out of bounds in 4KB mode"}
+		}
+		if bank1+CHR_BANK_SIZE/2 > uint32(len(cart.OriginalCHR)) {
+			return &MapperError{"updateCHRBanks", "CHR bank 1 out of bounds in 4KB mode"}
+		}
+
+		copy(cart.CHR[0:4096], cart.OriginalCHR[bank0:bank0+CHR_BANK_SIZE/2])
+		copy(cart.CHR[4096:8192], cart.OriginalCHR[bank1:bank1+CHR_BANK_SIZE/2])
+	}
+
+	return nil
+}
+
+// MMC1Write handles writes to MMC1 mapper registers
 func MMC1Write(cart *cartridge.Cartridge, addr uint16, value byte) {
-    // If bit 7 of the value is set, reset the shift register
-    if (value & 0x80) != 0 {
-        mmc1.ShiftRegister = 0x10
-        mmc1.WriteCount = 0
-        mmc1.Control |= 0x0C  // Also reset PRG bank mode
-        return
-    }
+	// Detect consecutive writes
+	if mmc1.LastWriteCycle > 0 {
+		mmc1.LastWriteCycle = 0
+		return // Ignore this write
+	}
 
-    // Load the shift register bit by bit
-    shift := (mmc1.ShiftRegister >> 1) | ((value & 0x01) << 4)
-    mmc1.ShiftRegister = shift
-    mmc1.WriteCount++
+	if (value & 0x80) != 0 {
+		// Reset shift register and set PRG bank mode to 3 (16KB, last bank fixed)
+		mmc1.ShiftRegister = 0x10
+		mmc1.WriteCount = 0
+		mmc1.Control |= MMC1_PRG_MODE_LAST_FIXED
+		mmc1.LastWriteCycle = 0
+		return
+	}
 
-    // If we've written 5 bits, write to the appropriate internal register
-    if mmc1.WriteCount == 5 {
-        registerData := mmc1.ShiftRegister
+	// Write the lowest bit of the value into the shift register
+	mmc1.ShiftRegister = ((mmc1.ShiftRegister >> 1) | ((value & 0x01) << 4))
+	mmc1.WriteCount++
 
-        switch {
-        case addr >= 0x8000 && addr <= 0x9FFF: // Control
-            mmc1.Control = registerData
-            mmc1.PRGMode = (mmc1.Control >> 2) & 0x03
-            mmc1.CHRMode = (mmc1.Control >> 4) & 0x01
+	// If we've written 5 bits, determine the target register and write the shift register's value to it
+	if mmc1.WriteCount == 5 {
+		registerData := mmc1.ShiftRegister
 
-            // Mirroring
-            switch mmc1.Control & 0x03 {
-            case 0: // One-screen, lower bank
-                cart.Header.RomType.VerticalMirroring = false
-                cart.Header.RomType.HorizontalMirroring = false
-            case 1: // One-screen, upper bank
-                cart.Header.RomType.VerticalMirroring = false
-                cart.Header.RomType.HorizontalMirroring = false
-            case 2: // Vertical
-                cart.Header.RomType.VerticalMirroring = true
-                cart.Header.RomType.HorizontalMirroring = false
-            case 3: // Horizontal
-                cart.Header.RomType.VerticalMirroring = false
-                cart.Header.RomType.HorizontalMirroring = true
-            }
-            fmt.Printf("MMC1: Control register write - Value: %02X, PRGMode: %d, CHRMode: %d\n",
-                mmc1.Control, mmc1.PRGMode, mmc1.CHRMode)
+		switch {
+		case addr >= 0x8000 && addr <= 0x9FFF:
+			updateControlRegister(cart, registerData)
+		case addr >= 0xA000 && addr <= 0xBFFF:
+			mmc1.CHRBank0 = registerData
+			if cart.Header.RomType.Mapper == 105 {
+				// MMC1 from NES-EVENT board.
+				// PRG RAM disable (0: enable, 1: open bus).
+				if (registerData & 0x10) != 0 {
+					mmc1.PRGRAMEnable = false
+				} else {
+					mmc1.PRGRAMEnable = true
+				}
+			}
+		case addr >= 0xC000 && addr <= 0xDFFF:
+			mmc1.CHRBank1 = registerData
+		case addr >= 0xE000:
+			mmc1.PRGBank = registerData
+			// PRG RAM enable/disable based on bit 4 of PRG bank register, except on MMC1A
+			if mmc1.MMC1Revision != 0 {
+				mmc1.PRGRAMEnable = (registerData & 0x10) == 0
+			}
+		}
 
-        case addr >= 0xA000 && addr <= 0xBFFF: // CHR bank 0
-            mmc1.CHRBank0 = registerData
-            fmt.Printf("MMC1: CHR Bank 0 write - Value: %02X\n", mmc1.CHRBank0)
+		// Reset the shift register and write count for the next sequence
+		mmc1.ShiftRegister = 0x10
+		mmc1.WriteCount = 0
 
-        case addr >= 0xC000 && addr <= 0xDFFF: // CHR bank 1
-            mmc1.CHRBank1 = registerData
-            fmt.Printf("MMC1: CHR Bank 1 write - Value: %02X\n", mmc1.CHRBank1)
-
-        case addr >= 0xE000 && addr <= 0xFFFF: // PRG bank
-            mmc1.PRGBank = registerData
-            fmt.Printf("MMC1: PRG Bank write - Value: %02X\n", mmc1.PRGBank)
-        }
-
-        // Reset shift register and write counter
-        mmc1.ShiftRegister = 0x10
-        mmc1.WriteCount = 0
-
-        // Update bank mapping after a register write
-        updateBankMapping(cart)
-    }
+		// Update the bank mapping after writing to the registers
+		if err := updateBankMapping(cart); err != nil {
+			log.Printf("Error updating bank mapping: %v", err)
+		}
+	}
+	mmc1.LastWriteCycle = 0
 }
 
-// MMC1 maps addresses to PRG and CHR ROM banks based on the MMC1 mapper's current state.
+// updateControlRegister updates the MMC1 control register and related state
+func updateControlRegister(cart *cartridge.Cartridge, value byte) {
+	mmc1.Control = value
+
+	// Update mirroring based on the lower two bits of the control register
+	switch value & MMC1_MIRROR_HORIZONTAL {
+	case MMC1_MIRROR_SINGLE_LOWER: // Single-screen mirroring, lower bank
+		cart.Header.RomType.VerticalMirroring = false
+		cart.Header.RomType.HorizontalMirroring = false
+		cart.Header.RomType.SingleScreenMirroring = true
+		cart.Header.RomType.SingleScreenBank = 0
+	case MMC1_MIRROR_SINGLE_UPPER: // Single-screen mirroring, upper bank
+		cart.Header.RomType.VerticalMirroring = false
+		cart.Header.RomType.HorizontalMirroring = false
+		cart.Header.RomType.SingleScreenMirroring = true
+		cart.Header.RomType.SingleScreenBank = 1
+	case MMC1_MIRROR_VERTICAL: // Vertical mirroring
+		cart.Header.RomType.VerticalMirroring = true
+		cart.Header.RomType.HorizontalMirroring = false
+		cart.Header.RomType.SingleScreenMirroring = false
+	case MMC1_MIRROR_HORIZONTAL: // Horizontal mirroring
+		cart.Header.RomType.VerticalMirroring = false
+		cart.Header.RomType.HorizontalMirroring = true
+		cart.Header.RomType.SingleScreenMirroring = false
+	}
+}
+
+// MMC1 handles memory mapping for MMC1 mapper
 func MMC1(addr uint16, cart *cartridge.Cartridge) (bool, uint16) {
-    if addr < 0x2000 {
-        // RAM
-        return false, addr % 0x0800
-    } else if addr >= 0x2000 && addr <= 0x3FFF {
-        // PPU registers
-        return false, 0x2000 + (addr % 8)
-    } else if addr >= 0x6000 && addr <= 0x7FFF {
-        // SRAM (if present)
-        if cart.Header.RomType.SRAM {
-            return false, addr - 0x6000
-        } else {
-            return false, 0 // No SRAM present
-        }
-    } else if addr >= 0x8000 && addr <= 0xFFFF {
-        // PRG ROM
-        localAddr := addr & 0x3FFF // PRG ROM offset
-        bankOffset := uint16(0)
-        if addr >= 0xC000 {
-            bankOffset = 16384 // upper bank
-        }
-
-        return true, bankOffset + localAddr
-    }
-
-    return false, addr
+	switch {
+	case addr < 0x2000:
+		return false, addr % 0x0800 // RAM mirroring
+	case addr >= 0x2000 && addr <= 0x3FFF:
+		return false, 0x2000 + (addr % 8) // PPU registers
+	case addr >= 0x6000 && addr <= 0x7FFF:
+		if mmc1.PRGRAMEnable && cart.Header.RomType.SRAM {
+			// PRG RAM enabled and present
+			// Check for SNROM, SOROM, SUROM, or SXROM
+			if cart.Header.RomType.Mapper == 1 {
+				switch {
+				case (mmc1.CHRBank0 & 0x10) != 0: // SOROM, SUROM, or SXROM with extended PRG RAM
+					prgRAMBank := uint16(mmc1.CHRBank0>>2) & 0x03 // Extract 2-bit bank select
+					return false, prgRAMBank*8192 + uint16(addr-0x6000)
+				default: // SNROM or other with 8KB PRG RAM
+					return false, addr - 0x6000
+				}
+			}
+		}
+		return false, 0 // PRG RAM disabled or not present
+	case addr >= 0x8000:
+		// PRG ROM is already mapped by updatePRGBanks, just return the address within cart.PRG
+		return true, addr - 0x8000
+	}
+	return false, addr
 }
 
-// MemoryMapper determines which mapper to use based on the ROM's header information.
+// MemoryMapper selects appropriate mapper based on cartridge type
 func MemoryMapper(cart *cartridge.Cartridge, addr uint16) (bool, uint16) {
-    switch cart.Header.RomType.Mapper {
-    case 0: // NROM
-        return Zero(addr, cart.Header.ROM_SIZE)
-    case 1: // MMC1
-        return MMC1(addr, cart)
-    default:
-        log.Fatalf("Unsupported mapper: %d", cart.Header.RomType.Mapper)
-        return false, 0
-    }
+	switch cart.Header.RomType.Mapper {
+	case 0: // NROM
+		return Zero(addr, cart.Header.ROM_SIZE)
+	case 1: // MMC1
+		return MMC1(addr, cart)
+	default:
+		log.Printf("Unsupported mapper: %d", cart.Header.RomType.Mapper)
+		return false, 0 // Indicate failure
+	}
 }
 
-// Zero is the mapper function for NROM (mapper 0).
+// Zero implements NROM (mapper 0) functionality
 func Zero(addr uint16, prgsize byte) (bool, uint16) {
-    if addr < 0x2000 {
-        return false, addr % 0x0800 // RAM
-    }
-
-    if addr >= 0x2000 && addr <= 0x3FFF {
-        return false, 0x2000 + (addr % 8) // PPU registers
-    }
-
-    if addr >= 0x8000 {
-        if prgsize == 1 {
-            return true, addr & 0x3FFF // 16KB ROM, mirror 0xC000-0xFFFF
-        }
-        return true, addr & 0x7FFF // 32KB ROM
-    }
-
-    return false, addr
+	switch {
+	case addr < 0x2000:
+		return false, addr % 0x0800 // RAM mirroring
+	case addr >= 0x2000 && addr <= 0x3FFF:
+		return false, 0x2000 + (addr % 8) // PPU registers
+	case addr >= 0x8000:
+		if prgsize == 1 {
+			// For 16KB PRG ROM, mirror the ROM
+			return true, (addr & 0x3FFF)
+		}
+		return true, addr & 0x7FFF // For 32KB PRG ROM
+	}
+	return false, addr
 }
 
-// PPU maps PPU addresses, handling nametable mirroring and palette RAM access.
+// PPU handles PPU memory mapping including mirroring
 func PPU(cart *cartridge.Cartridge, addr uint16) uint16 {
-    // Handle Palette RAM
-    if addr >= 0x3F00 && addr <= 0x3FFF {
-        addr = 0x3F00 + (addr % 0x20)
-        // Mirror $3F10/$3F14/$3F18/$3F1C to $3F00/$3F04/$3F08/$3F0C
-        if addr == 0x3F10 || addr == 0x3F14 || addr == 0x3F18 || addr == 0x3F1C {
-            addr -= 0x10
-        }
-        return addr
-    }
+	if addr >= 0x3F00 && addr <= 0x3FFF {
+		// Palette RAM, handle mirroring and special cases
+		addr = 0x3F00 + (addr % 0x20)
+		if addr == 0x3F10 || addr == 0x3F14 || addr == 0x3F18 || addr == 0x3F1C {
+			addr -= 0x10
+		}
+		return addr
+	}
 
-    addr = addr & 0x3FFF
-    if addr >= 0x3000 && addr < 0x3F00 {
-        addr -= 0x1000 // Fold $3000-$3EFF to $2000-$2EFF
-    }
+	addr = addr & 0x3FFF
+	if addr >= 0x3000 && addr < 0x3F00 {
+		addr -= 0x1000
+	}
 
-    if addr >= 0x2000 && addr < 0x3000 {
-        addr = addr - 0x2000
-        table := addr / 0x400
-        offset := addr % 0x400
+	if addr >= 0x2000 && addr < 0x3000 {
+		addr = addr - 0x2000
+		table := addr / 0x400
+		offset := addr % 0x400
 
-        if cart.Header.RomType.VerticalMirroring {
-            // Vertical mirroring
-            if table == 1 || table == 3 {
-                addr = 0x2400 + offset
-            } else {
-                addr = 0x2000 + offset
-            }
-        } else if cart.Header.RomType.HorizontalMirroring {
-            // Horizontal mirroring
-            if table >= 2 {
-                addr = 0x2000 + offset
-            } else {
-                addr = addr + 0x2000
-            }
-        } else {
-            // One-screen mirroring
-            if cart.Header.RomType.FourScreenVRAM {
-                // Use raw address for four-screen mode
-                addr = 0x2000 + addr
-            } else {
-                // Use lower nametable for one-screen mirroring
-                addr = 0x2000 + offset
-            }
-        }
-    }
+		// Handle mirroring based on nametable configuration
+		switch {
+		case cart.Header.RomType.VerticalMirroring:
+			// Vertical mirroring: NT0/NT2 and NT1/NT3 are mirrors
+			if table == 1 || table == 3 {
+				addr = 0x2400 + offset
+			} else {
+				addr = 0x2000 + offset
+			}
+		case cart.Header.RomType.HorizontalMirroring:
+			// Horizontal mirroring: NT0/NT1 and NT2/NT3 are mirrors
+			if table >= 2 {
+				addr = 0x2000 + offset
+			} else {
+				addr = addr + 0x2000
+			}
+		case cart.Header.RomType.SingleScreenMirroring:
+			// Single screen mirroring
+			addr = 0x2000 + uint16(cart.Header.RomType.SingleScreenBank)*0x400 + offset
+		default:
+			// Four-screen mirroring (uncommon, requires additional VRAM)
+			if cart.Header.RomType.FourScreenVRAM {
+				addr = 0x2000 + addr
+			} else {
+				addr = 0x2000 + offset
+			}
+		}
+	}
 
-    return addr
+	return addr
 }
