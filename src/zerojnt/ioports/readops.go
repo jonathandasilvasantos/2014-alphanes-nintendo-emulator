@@ -23,35 +23,31 @@ import "zerojnt/mapper"
 //import "fmt"
 
 func READ_PPUSTATUS(IO *IOPorts) byte {
-
-	var result byte = 0
-	result = SetBit(result, 0, Bit0(IO.PPUSTATUS.WRITTEN))
-	result = SetBit(result, 1, Bit1(IO.PPUSTATUS.WRITTEN))
-	result = SetBit(result, 2, Bit2(IO.PPUSTATUS.WRITTEN))
-	result = SetBit(result, 3, Bit3(IO.PPUSTATUS.WRITTEN))
-	result = SetBit(result, 4, Bit4(IO.PPUSTATUS.WRITTEN))
-	
-	if IO.PPUSTATUS.SPRITE_OVERFLOW == true {
-		result = SetBit(result, 5,1)
-	}
-	
-	if IO.PPUSTATUS.SPRITE_0_BIT == true {
-		result = SetBit(result, 6,1)
-	}
-		
-	if IO.PPUSTATUS.NMI_OCCURRED == true {
-		result = SetBit(result, 7,1)
-	}
-	IO.PPUSTATUS.NMI_OCCURRED = false
-	
-
-	IO.PPUSTATUS.SPRITE_0_BIT = false
-	IO.PPU_MEMORY_STEP = 0
-	//IO.VRAM_ADDRESS = 0
-	
-	return result	
+    var result byte = 0
+    
+    // Preserve lower 5 bits from previous write
+    result = IO.PPUSTATUS.WRITTEN & 0x1F
+    
+    // Set upper 3 status bits
+    if IO.PPUSTATUS.SPRITE_OVERFLOW {
+        result |= 0x20
+    }
+    if IO.PPUSTATUS.SPRITE_0_BIT {
+        result |= 0x40
+    }
+    if IO.PPUSTATUS.VBLANK {
+        result |= 0x80
+    }
+    
+    // Clear both VBlank and NMI occurred flags
+    IO.PPUSTATUS.VBLANK = false
+    IO.PPUSTATUS.NMI_OCCURRED = false
+    
+    // Reset address latch
+    IO.PPU_MEMORY_STEP = 0
+    
+    return result
 }
-
 func READ_OAMDATA(IO *IOPorts) byte {
 
 		var result byte = IO.PPU_OAM[IO.PPU_OAM_ADDRESS]
