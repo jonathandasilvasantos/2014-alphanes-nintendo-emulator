@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"zerojnt/mapper"
 )
 
 const (
@@ -26,12 +27,140 @@ type Header struct {
 
 type Cartridge struct {
 	Header      Header
-	Data        []byte // Raw ROM data
-	PRG         []byte // Program ROM (may be mapped by the mapper)
-	CHR         []byte // Character ROM/RAM (may be mapped by the mapper)
-	SRAM        []byte // Save RAM if enabled
-	OriginalPRG []byte // Original PRG ROM data (for mapper bank switching)
-	OriginalCHR []byte // Original CHR ROM data (for mapper bank switching)
+	Data        []byte        // Raw ROM data
+	PRG         []byte        // Program ROM (may be mapped by the mapper)
+	CHR         []byte        // Character ROM/RAM (may be mapped by the mapper)
+	SRAM        []byte        // Save RAM if enabled
+	OriginalPRG []byte        // Original PRG ROM data (for mapper bank switching)
+	OriginalCHR []byte        // Original CHR ROM data (for mapper bank switching)
+	Mapper      mapper.Mapper // The mapper used by this cartridge
+}
+
+// MapperAccessor Interface Implementations
+
+func (c *Cartridge) GetHeader() mapper.HeaderInfo {
+	return mapper.HeaderInfo{
+		ROM_SIZE:              c.Header.ROM_SIZE,
+		VROM_SIZE:             c.Header.VROM_SIZE,
+		Mapper:                c.Header.RomType.Mapper,
+		VerticalMirroring:     c.Header.RomType.VerticalMirroring,
+		HorizontalMirroring:   c.Header.RomType.HorizontalMirroring,
+		SRAM:                  c.Header.RomType.SRAM,
+		Trainer:               c.Header.RomType.Trainer,
+		FourScreenVRAM:        c.Header.RomType.FourScreenVRAM,
+		SingleScreenMirroring: c.Header.RomType.SingleScreenMirroring,
+		SingleScreenBank:      c.Header.RomType.SingleScreenBank,
+		MMC1Variant:           c.Header.RomType.MMC1Variant,
+	}
+}
+
+func (c *Cartridge) GetPRG() []byte {
+	return c.OriginalPRG
+}
+
+func (c *Cartridge) GetCHR() []byte {
+	return c.OriginalCHR
+}
+
+func (c *Cartridge) GetPRGSize() uint32 {
+	return uint32(len(c.OriginalPRG))
+}
+
+func (c *Cartridge) GetCHRSize() uint32 {
+	return uint32(len(c.OriginalCHR))
+}
+
+func (c *Cartridge) GetPRGRAMSize() uint32 {
+	return uint32(len(c.SRAM))
+}
+
+func (c *Cartridge) SetPRGRAMSize(size uint32) {
+	if len(c.SRAM) != int(size) {
+		c.SRAM = make([]byte, size)
+	}
+}
+
+func (c *Cartridge) GetCHRRAMSize() uint32 {
+	return CHR_BANK_SIZE // CHR RAM is typically 8KB for MMC1 and other mappers
+}
+
+func (c *Cartridge) SetCHRRAMSize(size uint32) {
+	if len(c.CHR) != int(size) {
+		c.CHR = make([]byte, size)
+	}
+}
+
+func (c *Cartridge) CopyPRGData(destOffset, srcOffset, length uint32) {
+	if srcOffset+length > uint32(len(c.OriginalPRG)) || destOffset+length > uint32(len(c.PRG)) {
+		log.Printf("Error: CopyPRGData out of bounds - srcOffset: %d, length: %d, OriginalPRG size: %d, destOffset: %d, PRG size: %d",
+			srcOffset, length, len(c.OriginalPRG), destOffset, len(c.PRG))
+		return
+	}
+	copy(c.PRG[destOffset:], c.OriginalPRG[srcOffset:srcOffset+length])
+}
+
+func (c *Cartridge) CopyCHRData(destOffset, srcOffset, length uint32) {
+	// Only copy if CHR ROM exists, otherwise CHR RAM is used and no copy is needed.
+	if len(c.OriginalCHR) > 0 {
+		if srcOffset+length > uint32(len(c.OriginalCHR)) || destOffset+length > uint32(len(c.CHR)) {
+			log.Printf("Error: CopyCHRData out of bounds: srcOffset: %d, length: %d, OriginalCHR size: %d, destOffset: %d, CHR size: %d",
+				srcOffset, length, len(c.OriginalCHR), destOffset, len(c.CHR))
+			return
+		}
+		copy(c.CHR[destOffset:], c.OriginalCHR[srcOffset:srcOffset+length])
+	}
+}
+
+func (c *Cartridge) HasVerticalMirroring() bool {
+	return c.Header.RomType.VerticalMirroring
+}
+
+func (c *Cartridge) HasHorizontalMirroring() bool {
+	return c.Header.RomType.HorizontalMirroring
+}
+
+func (c *Cartridge) HasFourScreenVRAM() bool {
+	return c.Header.RomType.FourScreenVRAM
+}
+
+func (c *Cartridge) HasSRAM() bool {
+	return c.Header.RomType.SRAM
+}
+
+func (c *Cartridge) GetSingleScreenBank() byte {
+	return c.Header.RomType.SingleScreenBank
+}
+
+func (c *Cartridge) GetMirroringMode() byte {
+	var mode byte
+	switch {
+	case c.Header.RomType.VerticalMirroring:
+		mode = mapper.MMC1_MIRROR_VERTICAL
+	case c.Header.RomType.HorizontalMirroring:
+		mode = mapper.MMC1_MIRROR_HORIZONTAL
+	case c.Header.RomType.SingleScreenMirroring:
+		mode = mapper.MMC1_MIRROR_SINGLE_LOWER
+		if c.Header.RomType.SingleScreenBank == 1 {
+			mode = mapper.MMC1_MIRROR_SINGLE_UPPER
+		}
+	case c.Header.RomType.FourScreenVRAM:
+		mode = 0x04 // Four-screen mirroring
+	default:
+		mode = 0xFF // Indicate an invalid or unknown mirroring mode
+	}
+	return mode
+}
+
+func (c *Cartridge) SetMirroringMode(vertical, horizontal, fourScreen bool, singleScreenBank byte) {
+	c.Header.RomType.VerticalMirroring = vertical
+	c.Header.RomType.HorizontalMirroring = horizontal
+	c.Header.RomType.FourScreenVRAM = fourScreen
+	c.Header.RomType.SingleScreenMirroring = !vertical && !horizontal && !fourScreen
+	c.Header.RomType.SingleScreenBank = singleScreenBank
+}
+
+func (c *Cartridge) GetMapperNumber() int {
+	return c.Header.RomType.Mapper
 }
 
 type RomType struct {
@@ -41,40 +170,55 @@ type RomType struct {
 	SRAM                  bool
 	Trainer               bool
 	FourScreenVRAM        bool
-	SingleScreenMirroring bool // Indicates single-screen mirroring is used
-	SingleScreenBank      byte   // Which nametable bank to use for single-screen (0 or 1)
-	MMC1Variant          string // Added to distinguish different MMC1 board variants (SOROM, SUROM, etc.)
+	SingleScreenMirroring bool
+	SingleScreenBank      byte
+	MMC1Variant           string
 }
 
 func verifyPRGROM(cart *Cartridge) {
+	fmt.Println("Verifying PRG ROM...")
 	expectedSize := int(cart.Header.ROM_SIZE) * PRG_BANK_SIZE
 	if len(cart.PRG) != 32768 || len(cart.OriginalPRG) != expectedSize {
 		fmt.Printf("WARNING: PRG ROM size mismatch! Expected: %d, Got: %d (Original: %d)\n",
 			expectedSize, len(cart.PRG), len(cart.OriginalPRG))
 	}
 
-	if len(cart.OriginalPRG) >= 16384 {
+	if len(cart.OriginalPRG) >= 0x4000 {
 		fmt.Printf("First PRG bank begins with: %02X %02X %02X %02X\n",
 			cart.OriginalPRG[0], cart.OriginalPRG[1],
 			cart.OriginalPRG[2], cart.OriginalPRG[3])
 
-		// Print reset vector
 		resetVectorLow := cart.OriginalPRG[0x3FFC]
 		resetVectorHigh := cart.OriginalPRG[0x3FFD]
-		fmt.Printf("Reset Vector: $%02X%02X\n", resetVectorHigh, resetVectorLow)
+		fmt.Printf("Original Reset Vector: $%02X%02X\n", resetVectorHigh, resetVectorLow)
 
-		lastOffset := len(cart.OriginalPRG) - 16384
+		lastOffset := len(cart.OriginalPRG) - 0x4000
 		fmt.Printf("Last PRG bank begins with: %02X %02X %02X %02X\n",
 			cart.OriginalPRG[lastOffset],
 			cart.OriginalPRG[lastOffset+1],
 			cart.OriginalPRG[lastOffset+2],
 			cart.OriginalPRG[lastOffset+3])
 	}
+
+	if len(cart.PRG) >= 0x4000 {
+		fmt.Printf("Mapped PRG bank begins with: %02X %02X %02X %02X\n",
+			cart.PRG[0], cart.PRG[1],
+			cart.PRG[2], cart.PRG[3])
+
+		resetVectorLow := cart.PRG[0x3FFC]
+		resetVectorHigh := cart.PRG[0x3FFD]
+		fmt.Printf("Mapped Reset Vector: $%02X%02X\n", resetVectorHigh, resetVectorLow)
+
+		lastOffset := len(cart.PRG) - 0x4000
+		fmt.Printf("Last mapped PRG bank begins with: %02X %02X %02X %02X\n",
+			cart.PRG[lastOffset],
+			cart.PRG[lastOffset+1],
+			cart.PRG[lastOffset+2],
+			cart.PRG[lastOffset+3])
+	}
 }
 
 func LoadRom(filename string) Cartridge {
-	fmt.Println("Loading ROM:", filename)
-
 	var cart Cartridge
 
 	file, err := os.Open(filename)
@@ -90,7 +234,7 @@ func LoadRom(filename string) Cartridge {
 
 	size := info.Size()
 	if size < HEADER_SIZE {
-		log.Fatal("ROM file is too small to be valid")
+		log.Fatalf("ROM file is too small to be valid. Size: %d", size)
 	}
 
 	cart.Data = make([]byte, size)
@@ -102,39 +246,33 @@ func LoadRom(filename string) Cartridge {
 	}
 
 	LoadHeader(&cart.Header, cart.Data)
-
-	// Store original PRG/CHR data before any mapper modifications
 	cart.OriginalPRG, cart.OriginalCHR = LoadPRGCHR(&cart)
 
-	// Print PRG ROM details before mapping
-	fmt.Printf("Original PRG ROM size: %d bytes\n", len(cart.OriginalPRG))
-	if len(cart.OriginalPRG) >= 0x4000 {
-		resetVectorLow := cart.OriginalPRG[0x3FFC]
-		resetVectorHigh := cart.OriginalPRG[0x3FFD]
-		fmt.Printf("Original Reset Vector: $%02X%02X\n", resetVectorHigh, resetVectorLow)
+	// Initialize mapper
+	switch cart.Header.RomType.Mapper {
+	case 0:
+		cart.Mapper = &mapper.NROM{}
+	case 1:
+		cart.Mapper = &mapper.MMC1{}
+	default:
+		log.Fatalf("Unsupported mapper: %d", cart.Header.RomType.Mapper)
+	}
+	cart.Mapper.Initialize(&cart)
+
+	// Allocate SRAM if used
+	if cart.Header.RomType.SRAM {
+		cart.SRAM = make([]byte, 8192) // 8KB of SRAM
+		fmt.Println("SRAM initialized")
 	}
 
-	// Load PRG and CHR with proper mapping
+	// Detect MMC1 variant
+	detectMMC1Variant(&cart)
+
+	// Load PRG and CHR data into the mapper
 	LoadPRG(&cart)
 	LoadCHR(&cart)
 
-	// Initialize SRAM if enabled
-	if cart.Header.RomType.SRAM {
-		cart.SRAM = make([]byte, 8192) // 8KB of SRAM
-	}
-
-	// Detect MMC1 board variant based on PRG and CHR sizes
-	detectMMC1Variant(&cart)
-
-	// Print mapped PRG ROM details
-	fmt.Printf("Mapped PRG ROM size: %d bytes\n", len(cart.PRG))
-	if len(cart.PRG) >= 0x4000 {
-		resetVectorLow := cart.PRG[0x3FFC]
-		resetVectorHigh := cart.PRG[0x3FFD]
-		fmt.Printf("Mapped Reset Vector: $%02X%02X\n", resetVectorHigh, resetVectorLow)
-	}
-
-	// Verify final PRG ROM state
+	// Verify PRG ROM after loading
 	verifyPRGROM(&cart)
 
 	return cart
@@ -142,35 +280,22 @@ func LoadRom(filename string) Cartridge {
 
 func LoadHeader(h *Header, b []byte) {
 	fmt.Println("Loading iNES header...")
-
 	copy(h.ID[:], b[0:4])
 
-	if h.ID[0] != 'N' || h.ID[1] != 'E' || h.ID[2] != 'S' || h.ID[3] != 0x1A {
-		log.Fatal("Invalid NES ROM: Missing header identifier")
+	if string(h.ID[:]) != "NES\x1A" {
+		log.Fatal("Invalid NES ROM: Missing or incorrect header identifier")
 	}
 
 	h.ROM_SIZE = b[4]
 	h.VROM_SIZE = b[5]
-
-	fmt.Printf("PRG-ROM size: %d x 16KB = %d bytes (%dKB)\n",
-		h.ROM_SIZE,
-		int(h.ROM_SIZE)*PRG_BANK_SIZE,
-		(int(h.ROM_SIZE)*PRG_BANK_SIZE)/1024)
-
-	fmt.Printf("CHR-ROM size: %d x 8KB = %d bytes (%dKB)\n",
-		h.VROM_SIZE,
-		int(h.VROM_SIZE)*CHR_BANK_SIZE,
-		(int(h.VROM_SIZE)*CHR_BANK_SIZE)/1024)
-
 	h.ROM_TYPE = b[6]
 	h.ROM_TYPE2 = b[7]
-
 	copy(h.Reserved[:], b[8:16])
-	for i, val := range h.Reserved {
-		if val != 0 {
-			fmt.Printf("Warning: Reserved byte %d is non-zero: %02X\n", i, val)
-		}
-	}
+
+	fmt.Printf("PRG-ROM size: %d x 16KB = %d bytes (%dKB)\n",
+		h.ROM_SIZE, int(h.ROM_SIZE)*PRG_BANK_SIZE, (int(h.ROM_SIZE)*PRG_BANK_SIZE)/1024)
+	fmt.Printf("CHR-ROM size: %d x 8KB = %d bytes (%dKB)\n",
+		h.VROM_SIZE, int(h.VROM_SIZE)*CHR_BANK_SIZE, (int(h.VROM_SIZE)*CHR_BANK_SIZE)/1024)
 
 	TranslateRomType(h)
 }
@@ -178,18 +303,12 @@ func LoadHeader(h *Header, b []byte) {
 func TranslateRomType(h *Header) {
 	fmt.Printf("Parsing ROM flags: %08b | %08b\n", h.ROM_TYPE, h.ROM_TYPE2)
 
-	lowerMapper := (h.ROM_TYPE & 0xF0) >> 4
-	upperMapper := h.ROM_TYPE2 & 0xF0
-	h.RomType.Mapper = int(upperMapper | lowerMapper)
-
+	h.RomType.Mapper = int((h.ROM_TYPE&0xF0)>>4 | (h.ROM_TYPE2 & 0xF0))
 	fmt.Printf("Mapper: %d\n", h.RomType.Mapper)
 
-	mirroring := h.ROM_TYPE & 0x01
-	h.RomType.HorizontalMirroring = mirroring == 0
-	h.RomType.VerticalMirroring = mirroring != 0
-
-	fmt.Printf("Mirroring: %s\n",
-		map[bool]string{true: "Vertical", false: "Horizontal"}[h.RomType.VerticalMirroring])
+	h.RomType.HorizontalMirroring = (h.ROM_TYPE & 0x01) == 0
+	h.RomType.VerticalMirroring = (h.ROM_TYPE & 0x01) != 0
+	fmt.Printf("Mirroring: %s\n", map[bool]string{true: "Vertical", false: "Horizontal"}[h.RomType.VerticalMirroring])
 
 	h.RomType.SRAM = (h.ROM_TYPE & 0x02) != 0
 	if h.RomType.SRAM {
@@ -206,22 +325,23 @@ func TranslateRomType(h *Header) {
 		fmt.Println("Four-screen VRAM mode enabled")
 	}
 
-	// Default to no single-screen mirroring unless set by mapper
 	h.RomType.SingleScreenMirroring = false
 	h.RomType.SingleScreenBank = 0
-
-	h.RomType.MMC1Variant = "" // Initialize to empty string
+	h.RomType.MMC1Variant = ""
 }
 
 func LoadPRGCHR(c *Cartridge) ([]byte, []byte) {
+	fmt.Println("Loading PRG and CHR data...")
 	offset := HEADER_SIZE
 	if c.Header.RomType.Trainer {
+		fmt.Println("Skipping trainer data")
 		offset += TRAINER_SIZE
 	}
 
 	prgSize := int(c.Header.ROM_SIZE) * PRG_BANK_SIZE
 	originalPRG := make([]byte, prgSize)
 	copy(originalPRG, c.Data[offset:offset+prgSize])
+	fmt.Printf("PRG data loaded: %d bytes\n", prgSize)
 
 	offset += prgSize
 	chrSize := int(c.Header.VROM_SIZE) * CHR_BANK_SIZE
@@ -229,49 +349,83 @@ func LoadPRGCHR(c *Cartridge) ([]byte, []byte) {
 	if chrSize > 0 {
 		originalCHR = make([]byte, chrSize)
 		copy(originalCHR, c.Data[offset:offset+chrSize])
+		fmt.Printf("CHR data loaded: %d bytes\n", chrSize)
 	} else {
-		originalCHR = make([]byte, CHR_BANK_SIZE)
+		fmt.Println("No CHR data in ROM, using CHR RAM")
+		originalCHR = make([]byte, 0) // No CHR ROM, using CHR RAM
 	}
 
 	return originalPRG, originalCHR
 }
 
 func LoadPRG(c *Cartridge) {
-	c.PRG = make([]byte, 32*1024)
+	fmt.Println("Loading PRG ROM...")
+	if c.Mapper == nil {
+		log.Fatal("Mapper not initialized")
+	}
 
-	if c.Header.RomType.Mapper == 1 {
-		// Copy first 16KB bank
-		copy(c.PRG[0:16384], c.OriginalPRG[0:16384])
-		// Copy last 16KB bank
-		lastBankOffset := len(c.OriginalPRG) - 16384
-		copy(c.PRG[16384:32768], c.OriginalPRG[lastBankOffset:lastBankOffset+16384])
-	} else {
-		// For NROM (Mapper 0) and others, mirror if necessary
-		if len(c.OriginalPRG) == 16*1024 {
-			// For 16KB ROMs, mirror the bank
-			copy(c.PRG[0:16384], c.OriginalPRG[0:16384])
-			copy(c.PRG[16384:32768], c.OriginalPRG[0:16384])
+	// For NROM, we just mirror the PRG ROM as needed
+	if _, ok := c.Mapper.(*mapper.NROM); ok {
+		c.PRG = make([]byte, 32*1024) // Allocate maximum possible size for NROM
+		switch len(c.OriginalPRG) {
+		case 16 * 1024: // 16KB PRG ROM
+			copy(c.PRG[0:16384], c.OriginalPRG)
+			copy(c.PRG[16384:32768], c.OriginalPRG) // Mirror to fill 32KB
 			fmt.Println("16KB PRG ROM mirrored to fill 32KB space")
-		} else {
-			// For 32KB ROMs, copy directly
-			copy(c.PRG[0:32768], c.OriginalPRG[0:32768])
+		case 32 * 1024: // 32KB PRG ROM
+			copy(c.PRG, c.OriginalPRG)
+			fmt.Println("32KB PRG ROM loaded")
+		default:
+			log.Fatalf("Unsupported PRG ROM size for NROM: %d", len(c.OriginalPRG))
 		}
+	} else if mapperMMC1, ok := c.Mapper.(*mapper.MMC1); ok {
+		c.PRG = make([]byte, 32*1024) // Allocate PRG space for MMC1
+		// Bank mapping will be handled by the mapper
+		if err := mapperMMC1.UpdateBankMapping(); err != nil {
+			log.Fatalf("Failed to initialize MMC1 bank mapping: %v", err)
+		}
+		fmt.Println("MMC1 PRG ROM bank mapping updated")
+	} else {
+		log.Fatalf("Unsupported mapper for PRG loading: %T", c.Mapper)
 	}
 }
 
 func LoadCHR(c *Cartridge) {
-	if len(c.OriginalCHR) > 0 {
-		c.CHR = make([]byte, len(c.OriginalCHR))
-		copy(c.CHR, c.OriginalCHR)
-	} else {
-		c.CHR = make([]byte, CHR_BANK_SIZE)
-	}
+    fmt.Println("Loading CHR ROM...")
+    if c.Mapper == nil {
+        log.Fatal("Mapper not initialized")
+    }
+
+    if len(c.OriginalCHR) == 0 {
+        // Allocate 8KB for CHR RAM when no CHR ROM is present
+        c.CHR = make([]byte, CHR_BANK_SIZE)
+        fmt.Println("CHR RAM initialized (no CHR ROM present)")
+    } else if _, ok := c.Mapper.(*mapper.NROM); ok {
+        // For NROM, copy CHR ROM data directly
+        c.CHR = make([]byte, len(c.OriginalCHR))
+        copy(c.CHR, c.OriginalCHR)
+        fmt.Println("CHR ROM loaded into CHR memory")
+    } else if mapperMMC1, ok := c.Mapper.(*mapper.MMC1); ok {
+        // MMC1 handles CHR loading during bank mapping
+        if len(c.OriginalCHR) > 0 {
+            c.CHR = make([]byte, len(c.OriginalCHR))
+            copy(c.CHR, c.OriginalCHR)
+            fmt.Println("CHR ROM loaded into CHR memory")
+        }
+        if err := mapperMMC1.UpdateBankMapping(); err != nil {
+            log.Fatalf("Failed to initialize MMC1 CHR bank mapping: %v", err)
+        }
+        fmt.Println("MMC1 CHR ROM bank mapping updated")
+    } else {
+        log.Fatalf("Unsupported mapper for CHR loading: %T", c.Mapper)
+    }
 }
 
-// detectMMC1Variant detects the specific MMC1 board variant based on PRG and CHR sizes
 func detectMMC1Variant(cart *Cartridge) {
+	fmt.Println("Detecting MMC1 variant...")
 	if cart.Header.RomType.Mapper != 1 {
-		return // Not MMC1
+		fmt.Println("Not an MMC1 cartridge")
+		return
 	}
 
 	prgSizeKB := int(cart.Header.ROM_SIZE) * 16
@@ -279,7 +433,7 @@ func detectMMC1Variant(cart *Cartridge) {
 
 	switch {
 	case prgSizeKB == 32:
-		cart.Header.RomType.MMC1Variant = "SEROM" // Or SHROM/SH1ROM
+		cart.Header.RomType.MMC1Variant = "SEROM"
 	case prgSizeKB > 512:
 		cart.Header.RomType.MMC1Variant = "SXROM"
 	case prgSizeKB == 512:
@@ -289,9 +443,9 @@ func detectMMC1Variant(cart *Cartridge) {
 	case prgSizeKB <= 256 && chrSizeKB == 8 && !cart.Header.RomType.SRAM:
 		cart.Header.RomType.MMC1Variant = "SGROM"
 	case prgSizeKB <= 256 && chrSizeKB > 8:
-		cart.Header.RomType.MMC1Variant = "SKROM" // Assuming SKROM for >= 16KB CHR
+		cart.Header.RomType.MMC1Variant = "SKROM"
 	case prgSizeKB <= 256 && cart.Header.RomType.SRAM && cart.Header.VROM_SIZE == 0:
-		if cart.Header.ROM_SIZE * 16 == 128 {
+		if cart.Header.ROM_SIZE*16 == 128 {
 			cart.Header.RomType.MMC1Variant = "SOROM"
 		} else {
 			cart.Header.RomType.MMC1Variant = "SXROM"
@@ -299,8 +453,8 @@ func detectMMC1Variant(cart *Cartridge) {
 	case prgSizeKB <= 256 && chrSizeKB >= 16 && chrSizeKB <= 64 && cart.Header.RomType.SRAM:
 		cart.Header.RomType.MMC1Variant = "SZROM"
 	default:
-		cart.Header.RomType.MMC1Variant = "UNKNOWN" // Indicate unknown MMC1 variant
+		cart.Header.RomType.MMC1Variant = "UNKNOWN"
 	}
 
-	fmt.Printf("Detected MMC1 Variant: %s\n", cart.Header.RomType.MMC1Variant)
+	fmt.Printf("Detected MMC1 variant: %s\n", cart.Header.RomType.MMC1Variant)
 }

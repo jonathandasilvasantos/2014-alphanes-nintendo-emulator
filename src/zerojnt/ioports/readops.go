@@ -10,17 +10,15 @@ This file is part of Alphanes.
 
     Alphanes is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with Alphanes.  If not, see <http://www.gnu.org/licenses/>.
+    along with Alphanes. If not, see <http://www.gnu.org/licenses/>.
 */
 package ioports
 
 import "zerojnt/cartridge"
-import "zerojnt/mapper"
-//import "fmt"
 
 func READ_PPUSTATUS(IO *IOPorts) byte {
     var result byte = 0
@@ -48,27 +46,26 @@ func READ_PPUSTATUS(IO *IOPorts) byte {
     
     return result
 }
-func READ_OAMDATA(IO *IOPorts) byte {
 
-		var result byte = IO.PPU_OAM[IO.PPU_OAM_ADDRESS]
-		return result
+func READ_OAMDATA(IO *IOPorts) byte {
+	var result byte = IO.PPU_OAM[IO.PPU_OAM_ADDRESS]
+	return result
 }
 
-func READ_PPUDATA(IO *IOPorts, cart *cartridge.Cartridge) byte {
+func READ_PPUDATA(IO *IOPorts, cart *cartridge.Cartridge, newaddr uint16) byte {
+	var result byte
 
-	
+	if newaddr >= 0x3F00 && newaddr <= 0x3FFF {
+		// Palette RAM reads are not buffered
+		result = IO.PPU_RAM[newaddr]
+	} else {
+		// For other addresses, return buffered value and update buffer
+		result = IO.PREVIOUS_READ
+		IO.PREVIOUS_READ = IO.PPU_RAM[newaddr]
+	}
 
-	var newaddr uint16 = mapper.PPU (cart, IO.VRAM_ADDRESS)
+	// Increment VRAM address after read
+	IO.VRAM_ADDRESS += IO.PPUCTRL.VRAM_INCREMENT
 
-
-	var request byte = IO.PPU_RAM[ newaddr ]
-	var result byte = IO.PREVIOUS_READ
-	
-	if (newaddr >= 0x3F00) && (newaddr <= 0x3F1F) {
-            return request
-	}  
-	
-	
-	IO.PREVIOUS_READ = request
 	return result
 }

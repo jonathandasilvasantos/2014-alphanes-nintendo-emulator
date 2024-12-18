@@ -23,6 +23,7 @@ import (
 	"os"
 	"strings"
 	"time"
+
 	"zerojnt/cartridge"
 	"zerojnt/cpu"
 	"zerojnt/debug"
@@ -125,21 +126,21 @@ func main() {
 }
 
 func emulate() {
-    fmt.Printf("Entering emulate(), PC: %04X\n", Nescpu.PC)
+	fmt.Printf("Entering emulate(), PC: %04X\n", Nescpu.PC)
 
-    // Special case for nestest.nes
-    if strings.HasSuffix(os.Args[1], "nestest.nes") { 
-        if Nescpu.PC == 0xC004 {
-            Nescpu.PC = 0xC000
-            fmt.Printf("  emulate() - Manually set PC to: %04X for nestest.nes\n", Nescpu.PC)
-        }
-    }
-
-    for Alphanes.Running && Nescpu.Running {
-		if !Alphanes.Paused {
-        	tick()
+	// Special case for nestest.nes
+	if strings.HasSuffix(os.Args[1], "nestest.nes") {
+		if Nescpu.PC == 0xC004 {
+			Nescpu.PC = 0xC000
+			fmt.Printf("  emulate() - Manually set PC to: %04X for nestest.nes\n", Nescpu.PC)
 		}
-    }
+	}
+
+	for Alphanes.Running && Nescpu.Running {
+		if !Alphanes.Paused {
+			tick()
+		}
+	}
 }
 
 func tick() {
@@ -152,15 +153,15 @@ func tick() {
 	}
 
 	// Pass the global cycle count to the APU
-	Nescpu.APU.Clock(Alphanes.cycleCount) // Correctly passing the cycle count
+	if Nescpu.APU != nil {
+		Nescpu.APU.Clock(Alphanes.cycleCount)
+	}
 
 	// Increment global cycle count
 	Alphanes.cycleCount++
 
-	
-
 	// Check if we've completed a frame
-	if Alphanes.cycleCount % cpuCyclesPerFrame == 0 {
+	if Alphanes.cycleCount%cpuCyclesPerFrame == 0 {
 		// Calculate how long this frame took
 		elapsed := time.Since(Alphanes.frameStartTime)
 
