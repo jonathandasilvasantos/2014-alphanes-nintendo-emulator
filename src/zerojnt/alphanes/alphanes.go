@@ -20,6 +20,7 @@ package main
 
 import (
 	"fmt"
+	"log" // <<<--- IMPORT LOG
 	"os"
 	"strings"
 	"time"
@@ -58,7 +59,7 @@ type Emulator struct {
 var (
 	Cart     cartridge.Cartridge
 	Nescpu   cpu.CPU
-	Nesppu   ppu.PPU
+	Nesppu   *ppu.PPU // <<<--- CHANGED TO POINTER TYPE *ppu.PPU
 	Nesio    ioports.IOPorts
 	Debug    debug.Debug
 	PPUDebug debug.PPUDebug
@@ -91,7 +92,9 @@ func main() {
 
 	// Initialize CPU first
 	Nescpu = cpu.StartCPU()
-	Nescpu.IO = ioports.StartIOPorts(&Cart)
+	// Initialize IOPorts using the loaded Cartridge
+	Nesio = ioports.StartIOPorts(&Cart) // <<<--- INITIALIZE Nesio HERE
+	Nescpu.IO = Nesio                   // Assign initialized IO to CPU
 	Nescpu.D = Debug
 	Nescpu.D.Verbose = true
 
@@ -102,8 +105,15 @@ func main() {
 	fmt.Printf("PC after SetResetVector: %04X\n", Nescpu.PC)
 
 	// Initialize PPU
-	Nesppu = ppu.StartPPU(&Nescpu.IO)
-	Nesppu.D = &PPUDebug
+	var errPPU error
+	Nesppu, errPPU = ppu.StartPPU(&Nescpu.IO, &Cart) // <<<--- FIXED: Assign to Nesppu pointer, pass &Nescpu.IO and &Cart, capture error
+	if errPPU != nil {                              // <<<--- FIXED: Check error
+		log.Fatalf("Failed to initialize PPU: %v", errPPU)
+	}
+	// Nesppu.D = &PPUDebug // <<<--- REMOVED/COMMENTED: PPU struct has no 'D' field
+
+	// Link PPU to CPU (if CPU needs a direct reference, currently PPU has IO ref)
+	Nescpu.SetPPU(Nesppu) // <<<--- ADDED: Assumes a SetPPU method exists in cpu.go
 
 	// DEBUG: Print contents of cart.PRG around the reset vector
 	fmt.Printf("PRG[0x3FFC]: %02X\n", Cart.PRG[0x3FFC])
@@ -123,6 +133,9 @@ func main() {
 	if Nescpu.APU != nil {
 		Nescpu.APU.Shutdown()
 	}
+	if Nesppu != nil { // <<<--- ADDED: Cleanup PPU SDL resources
+		Nesppu.Cleanup()
+	}
 }
 
 func emulate() {
@@ -139,17 +152,26 @@ func emulate() {
 	for Alphanes.Running && Nescpu.Running {
 		if !Alphanes.Paused {
 			tick()
+		} else {
+			// Handle keyboard input even when paused (e.g., to unpause)
+			if Nesppu != nil {
+				Nesppu.CheckKeyboard() // Assuming CheckKeyboard exists in PPU for quit events
+			}
+			time.Sleep(16 * time.Millisecond) // Prevent busy-waiting when paused
 		}
 	}
 }
 
 func tick() {
 	// Execute one CPU cycle
-	cpu.Process(&Nescpu, &Cart)
+	cpu.Process(&Nescpu, &Cart) // Process handles internal cycle counting
 
 	// Execute 3 PPU cycles for each CPU cycle
 	for i := 0; i < ppuCyclesPerCpuCycle; i++ {
-		ppu.Process(&Nesppu, &Cart)
+		ppu.Process(Nesppu) // <<<--- FIXED: Pass pointer Nesppu, remove Cart argument
+		if Nesppu != nil {
+			// Pass the global cycle count for potential PPU timing? Not typically needed directly.
+		}
 	}
 
 	// Pass the global cycle count to the APU
@@ -160,8 +182,10 @@ func tick() {
 	// Increment global cycle count
 	Alphanes.cycleCount++
 
-	// Check if we've completed a frame
-	if Alphanes.cycleCount%cpuCyclesPerFrame == 0 {
+	// Check if we've completed a frame (timing based on PPU frames is more accurate)
+	// If Nesppu indicates frame is complete, handle timing. PPU runs 262 scanlines * 341 cycles.
+	// Let's stick to the CPU-based timing for now, but PPU frame completion is better.
+	if Alphanes.cycleCount%cpuCyclesPerFrame == 0 { // Approximate frame boundary
 		// Calculate how long this frame took
 		elapsed := time.Since(Alphanes.frameStartTime)
 
@@ -172,5 +196,11 @@ func tick() {
 
 		// Start timing the next frame
 		Alphanes.frameStartTime = time.Now()
+
+		// Check keyboard input once per frame (or more often if needed)
+		if Nesppu != nil {
+			// Moved CheckKeyboard to VBlank in PPU.Process for better timing
+			// Nesppu.CheckKeyboard()
+		}
 	}
 }
