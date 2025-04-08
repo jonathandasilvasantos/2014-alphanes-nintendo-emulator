@@ -20,15 +20,11 @@ This file is part of Alphanes.
 package ioports
 
 import (
-	"log" // Import log package for DMA warning if needed
 	"zerojnt/cartridge"
 )
 
 // PPU_STATUS ($2002) Register Representation
 type PPU_STATUS struct {
-	// Lower 5 bits contain the last value written to any PPU register (bus noise/decay)
-	// We can simplify and just track the flags, or use LastRegWrite field.
-	// Unused          byte // Bits 0-4: Least significant bits previously written into a PPU register
 	SPRITE_OVERFLOW bool // Bit 5: Set when >8 sprites found during evaluation for next scanline. Cleared at dot 1 of pre-render line.
 	SPRITE_0_BIT    bool // Bit 6: Set when non-zero pixel of sprite 0 overlaps non-zero background pixel. Cleared at dot 1 of pre-render line.
 	VBLANK          bool // Bit 7: Vertical Blank flag. Set at dot 1 of scanline 241. Cleared by reading $2002 or at dot 1 of pre-render line.
@@ -37,8 +33,6 @@ type PPU_STATUS struct {
 // Get returns the byte value of the PPUSTATUS register
 func (s *PPU_STATUS) Get() byte {
 	var status byte = 0
-	// Or retrieve LastRegWrite & mask? For now, just flags.
-	// status |= (LastRegWrite & 0x1F) // Simulate lower 5 bits (requires access to LastRegWrite)
 	if s.SPRITE_OVERFLOW {
 		status |= 0x20
 	}
@@ -53,11 +47,9 @@ func (s *PPU_STATUS) Get() byte {
 
 // Set initializes the PPUSTATUS flags from a byte (usually 0 at reset)
 func (s *PPU_STATUS) Set(data byte) {
-	// Typically only flags are set internally, not directly written by CPU
 	s.SPRITE_OVERFLOW = (data & 0x20) != 0
 	s.SPRITE_0_BIT = (data & 0x40) != 0
 	s.VBLANK = (data & 0x80) != 0
-	// Lower 5 bits are ignored here as they reflect internal bus state
 }
 
 // PPU_MASK ($2001) Register Representation
@@ -171,7 +163,6 @@ func (c *PPU_CTRL) Get() byte {
 
 // IOPorts holds memory and state shared or directly accessed by CPU/PPU interaction
 type IOPorts struct {
-	// *** FIX 1: Added CPU_RAM field ***
 	CPU_RAM [2048]byte // 2KB CPU Internal RAM ($0000-$07FF mirrored)
 
 	// PPU Specific Memory
@@ -192,7 +183,6 @@ type IOPorts struct {
 	LastRegWrite byte
 
 	// NMI Control
-	// *** FIX 2: Renamed NMI_REQ to NMI ***
 	NMI bool // Flag indicating PPU wants to assert NMI line (set by PPU, cleared by PPU on $2002 read)
 
 	// Cartridge Reference (might be needed for mappers interacting with IO)
@@ -212,13 +202,6 @@ type IOPorts struct {
 func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
 	var io IOPorts
 
-	// CPU_RAM, VRAM, PaletteRAM, OAM are zero-initialized by default.
-	// Explicitly initialize if needed (e.g., OAM to FF).
-	// for i := range io.CPU_RAM { io.CPU_RAM[i] = 0 }
-	// for i := range io.VRAM { io.VRAM[i] = 0 }
-	// for i := range io.PaletteRAM { io.PaletteRAM[i] = 0 } // Palette should probably load defaults? See PPU Start.
-	// for i := range io.OAM { io.OAM[i] = 0xFF } // OAM often initialized to $FF
-
 	io.PPUCTRL.Set(0)
 	io.PPUMASK.Set(0)
 	io.PPUSTATUS.Set(0)
@@ -226,9 +209,9 @@ func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
 	io.PPU_DATA_BUFFER = 0
 	io.LastRegWrite = 0
 
-	io.NMI = false // Initialize the renamed field
+	io.NMI = false
 
-	io.CART = cart // Store cartridge reference
+	io.CART = cart
 	io.CPU_CYC_INCREASE = 0
 
 	io.OAMDMA_Transfer = false
@@ -237,43 +220,28 @@ func StartIOPorts(cart *cartridge.Cartridge) IOPorts {
 	return io
 }
 
-// --- NMI Helper Functions ---
-
 // TriggerNMI sets the NMI request flag. CPU should detect this.
 func (io *IOPorts) TriggerNMI() {
-	// *** FIX 2: Use renamed field ***
 	io.NMI = true
 }
 
 // ClearNMI clears the NMI request flag. Called by PPU after $2002 read.
 func (io *IOPorts) ClearNMI() {
-	// *** FIX 2: Use renamed field ***
 	io.NMI = false
 }
-
-// --- OAM DMA ($4014) Handling ---
-// This is tricky. $4014 is usually handled by the CPU/Bus write logic.
-// When CPU writes to $4014, it should:
-// 1. Call a function like `StartOAMDMA(io, page)` here.
-// 2. Stall itself for ~513/514 cycles.
-// 3. During the stall, the PPU/Bus logic performs the 256 byte transfer.
 
 // StartOAMDMA initiates the OAM DMA process state.
 // `page` is the value written to $4014 (high byte of CPU source address).
 func (io *IOPorts) StartOAMDMA(page byte) {
 	io.OAMDMA_Page = page
 	io.OAMDMA_Transfer = true
-	io.OAMDMA_Addr = 0       // Start reading from $xx00
-	io.CPU_CYC_INCREASE = 513 // Base stall cycles (may vary slightly)
-	// DMA starts after 1 (or 2 on odd CPU cycles) dummy cycles
-	// Let the CPU handle the exact stall timing. We just set the flags.
-	// The actual transfer needs to happen during CPU stall, likely driven by CPU/Bus clock ticks
+	io.OAMDMA_Addr = 0
+	io.CPU_CYC_INCREASE = 513
 }
 
 // DoOAMDMATransfer performs one byte transfer during OAM DMA.
 // This should be called 256 times by the main loop/CPU while DMA is active.
 // `cpuRead` is a function passed in to read from CPU memory space.
-// Note: cpuRead function MUST handle the memory mapping for the source address $xx00 - $xxFF.
 func (io *IOPorts) DoOAMDMATransfer(cpuRead func(addr uint16) byte) {
 	if !io.OAMDMA_Transfer {
 		return
@@ -286,19 +254,9 @@ func (io *IOPorts) DoOAMDMATransfer(cpuRead func(addr uint16) byte) {
 	data := cpuRead(dmaSourceAddr)
 
 	// Write the data to the PPU's OAM
-	// NesDev Wiki: "The PPU accesses OAM through the PPU's OAM address port $2003/4.
-	// OAMADDR is set to 0 before the transfer begins."
-	// Although $2003/OAMADDR might not be 0 *before* the write to $4014,
-	// the DMA hardware itself effectively writes to OAM starting at index 0.
-	// So we use io.OAMDMA_Addr as the index into io.OAM directly.
-	if int(io.OAMDMA_Addr) < len(io.OAM) {
-		io.OAM[io.OAMDMA_Addr] = data
-	} else {
-		// This should theoretically not happen if OAMDMA_Addr wraps correctly
-		log.Printf("Warning: OAM DMA write index %d out of bounds", io.OAMDMA_Addr)
-	}
+	io.OAM[io.OAMDMA_Addr] = data
 
-	io.OAMDMA_Addr++ // Increment source address offset (wraps automatically due to byte type)
+	io.OAMDMA_Addr++
 
 	// Check if transfer is complete (after 256 bytes, OAMDMA_Addr wraps to 0)
 	if io.OAMDMA_Addr == 0 {
@@ -306,9 +264,3 @@ func (io *IOPorts) DoOAMDMATransfer(cpuRead func(addr uint16) byte) {
 		io.CPU_CYC_INCREASE = 0 // Reset cycle impact after completion (CPU stall ends)
 	}
 }
-
-// RMPPU / WMPPU are removed. CPU calls ppu.ReadRegister / ppu.WriteRegister directly.
-// The exception is $4014 OAM DMA write, which should be handled by the CPU/Bus write logic,
-// potentially calling io.StartOAMDMA.
-
-// SetNMI is removed, use io.TriggerNMI()
