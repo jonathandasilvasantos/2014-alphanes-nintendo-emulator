@@ -1,181 +1,168 @@
 // File: apu/channels/triangle.go
 package channels
 
-// TriangleChannel represents the triangle wave channel in the NES APU
+// Triangle waveform sequence (32 steps, values 0-15)
+var TriangleSequence = [32]byte{
+	15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+}
+
+// TriangleChannel represents the triangle wave channel in the NES APU.
 type TriangleChannel struct {
-	enabled       bool
-	period        uint16
-	lengthCount   byte
-	linearCount   byte
-	linearReload  byte
-	linearControl bool
-	sequencePos   byte
-	timer         uint16
-	reloadFlag    bool
-	sequence      [32]byte
-	lastSample    float32 // For smooth transitions
-	outputLevel   float32 // For volume control
+	enabled bool
+
+	// Timer/Period
+	timerPeriod uint16 // Period reload value from registers $400A/$400B
+	timerValue  uint16 // Current timer countdown value
+
+	// Length Counter
+	lengthCounter byte // Counts down to zero to silence channel
+	lengthHalted  bool // Also linear counter control flag
+
+	// Linear Counter (controls duration/volume override)
+	linearCounter       byte // Counts down when clocked by frame counter
+	linearReloadValue   byte // Value to reload linear counter from $4008
+	linearReloadRequest bool // Flag to reload linear counter on next clock
+
+	// Sequencer
+	sequencePosition byte // Current step in the 32-step TriangleSequence (0-31)
+
+	// Output cache
+	lastOutput float32
 }
 
 // NewTriangleChannel creates and initializes a new TriangleChannel.
 func NewTriangleChannel() *TriangleChannel {
-	t := &TriangleChannel{
-		enabled:     false,
-		sequencePos: 0,
-		reloadFlag:  false,
-		lastSample:  0.0,
-		outputLevel: 1.0,
-	}
-
-	// Initialize the triangle sequence (15, 14, 13,...0, 0, 1, 2,...15)
-	for i := 0; i < 16; i++ {
-		t.sequence[i] = byte(15 - i)
-		t.sequence[31-i] = byte(i)
-	}
-
+	t := &TriangleChannel{}
+	t.Reset()
 	return t
 }
 
-// WriteRegister handles writes to the triangle channel's registers.
-func (t *TriangleChannel) WriteRegister(addr uint16, value byte) {
-	switch addr {
-	case 0x4008: // Linear counter load and control flag
-		t.linearReload = value & 0x7F
-		t.linearControl = value&0x80 != 0
-		t.reloadFlag = true
-	case 0x400A: // Period low
-		t.period = (t.period & 0xFF00) | uint16(value)
-		// Reset timer if it's out of sync with the new period
-		if t.timer > t.period {
-			t.timer = t.period
-		}
-	case 0x400B: // Length counter load and period high
-		t.period = (t.period & 0x00FF) | (uint16(value&0x07) << 8)
-		if t.enabled {
-			t.lengthCount = LengthTable[value>>3]
-		}
-		t.reloadFlag = true
-		t.timer = t.period // Reset timer on period high write
-	}
-}
-
-// ClockTimer clocks the triangle channel's timer and advances the sequence.
-func (t *TriangleChannel) ClockTimer() {
-	if !t.enabled {
-		t.outputLevel *= 0.995 // Smooth fade out when disabled (adjustable factor)
-		return
-	}
-
-	// Ultrasonic frequencies (period < 2) are inaudible and muted.
-	if t.period < 2 {
-		t.outputLevel = 0
-		return
-	}
-
-	// Only advance sequence if both length counter and linear counter are > 0.
-	if t.lengthCount > 0 && t.linearCount > 0 {
-		if t.timer == 0 {
-			t.timer = t.period
-			t.sequencePos = (t.sequencePos + 1) & 0x1F // Advance sequence (wraps around at 32)
-			t.outputLevel = 1.0 // Restore full volume when active
-		} else {
-			t.timer--
-		}
-	} else {
-		t.outputLevel *= 0.995 // Smooth fade when counters expire (adjustable factor)
-	}
-}
-
-// ClockLinearCounter clocks the linear counter.
-func (t *TriangleChannel) ClockLinearCounter() {
-	if t.reloadFlag {
-		t.linearCount = t.linearReload
-	} else if t.linearCount > 0 {
-		t.linearCount--
-	}
-
-	if !t.linearControl {
-		t.reloadFlag = false
-	}
-}
-
-// ClockLengthCounter clocks the length counter.
-func (t *TriangleChannel) ClockLengthCounter() {
-	if t.enabled && t.lengthCount > 0 && !t.linearControl {
-		t.lengthCount--
-	}
-}
-
-// GetSample returns the current output sample of the triangle channel.
-func (t *TriangleChannel) GetSample() float32 {
-	if !t.enabled || t.lengthCount == 0 || t.linearCount == 0 || t.period < 2 {
-		// Smooth fade to silence
-		t.lastSample *= 0.995 // Adjustable smoothing factor
-		return t.lastSample
-	}
-
-	// Get the raw sequence value
-	raw := float32(t.sequence[t.sequencePos])
-
-	// Scale to 0.0 - 0.8 range (avoid clipping)
-	targetSample := raw / 15.0 * 0.8
-
-	// Apply smooth transition between samples
-	t.lastSample = t.lastSample*0.7 + targetSample*0.3 // Adjustable smoothing factors
-
-	// Apply output level for volume control
-	finalSample := t.lastSample * t.outputLevel
-
-	// Scale to 0.0 - 1.0 range with soft clipping
-	finalSample = (finalSample + 1.0) * 0.5
-
-	// Soft clipping to reduce harshness (adjustable thresholds)
-	if finalSample > 0.95 {
-		finalSample = 0.95 + (finalSample-0.95)*0.05
-	} else if finalSample < 0.05 {
-		finalSample = 0.05 + (finalSample-0.05)*0.05
-	}
-
-	return finalSample
-}
-
-// SetEnabled enables or disables the triangle channel.
-func (t *TriangleChannel) SetEnabled(enabled bool) {
-	if t.enabled != enabled {
-		t.enabled = enabled
-		if !enabled {
-			t.lengthCount = 0
-			t.linearCount = 0
-			t.outputLevel = 0.0 // Fade out when disabled
-			t.lastSample = 0.0  // Reset last sample
-		} else {
-			t.outputLevel = 1.0 // Restore volume when enabled
-		}
-	}
-}
-
-
-// Clock clocks the triangle channel's components.
-func (t *TriangleChannel) Clock() {
-	t.ClockTimer()
-}
-
-// IsEnabled returns whether the triangle channel is currently enabled.
-func (t *TriangleChannel) IsEnabled() bool {
-	return t.enabled
-}
-
-// Reset resets the triangle channel to its initial state.
+// Reset initializes the triangle channel to its power-up state.
 func (t *TriangleChannel) Reset() {
 	t.enabled = false
-	t.period = 0
-	t.lengthCount = 0
-	t.linearCount = 0
-	t.linearReload = 0
-	t.linearControl = false
-	t.sequencePos = 0
-	t.timer = 0
-	t.reloadFlag = false
-	t.lastSample = 0.0
-	t.outputLevel = 0.0
+	t.timerPeriod = 0
+	t.timerValue = 0
+	t.lengthCounter = 0
+	t.lengthHalted = false
+	t.linearCounter = 0
+	t.linearReloadValue = 0
+	t.linearReloadRequest = false
+	t.sequencePosition = 0
+	t.lastOutput = 0.0
+}
+
+// WriteRegister handles writes to the triangle channel's registers ($4008-$400B).
+func (t *TriangleChannel) WriteRegister(addr uint16, value byte) {
+	reg := addr & 3 // Register index (0-3, though only 0, 2, 3 are used)
+
+	switch reg {
+	case 0: // $4008: Linear counter control, length counter halt
+		t.lengthHalted = (value & 0x80) != 0 // Bit 7: Length halt / Linear control
+		t.linearReloadValue = value & 0x7F   // Bits 0-6: Linear counter reload value
+
+	case 1: // $4009: Unused
+
+	case 2: // $400A: Timer low bits
+		t.timerPeriod = (t.timerPeriod & 0xFF00) | uint16(value)
+
+	case 3: // $400B: Length counter load, Timer high bits
+		t.timerPeriod = (t.timerPeriod & 0x00FF) | (uint16(value&0x07) << 8)
+		if t.enabled {
+			t.lengthCounter = LengthTable[(value>>3)&0x1F] // Load length counter if channel is enabled
+		}
+		// Writing to $400B sets the linear counter reload flag
+		t.linearReloadRequest = true
+	}
+}
+
+// ClockTimer advances the channel's timer by one CPU cycle.
+// When the timer reaches zero, it reloads and advances the waveform sequencer position,
+// but only if both the linear counter and length counter are non-zero.
+func (t *TriangleChannel) ClockTimer() {
+	if !t.enabled { // Should we clock timer if disabled? NESDev implies yes.
+		// return // Let's allow timer to clock even if disabled
+	}
+
+	// Don't clock timer if period is too low (prevents excessive sequence advancement)
+	// Some sources say period 0 or 1 can cause issues. Period 0 effectively halts.
+	if t.timerPeriod == 0 {
+		return
+	}
+
+	if t.timerValue == 0 {
+		t.timerValue = t.timerPeriod // Reload timer
+		// Advance sequence ONLY if linear and length counters are active
+		if t.linearCounter > 0 && t.lengthCounter > 0 {
+			t.sequencePosition = (t.sequencePosition + 1) % 32
+		}
+	} else {
+		t.timerValue--
+	}
+}
+
+// ClockLinearCounter advances the linear counter state. Called by frame counter.
+func (t *TriangleChannel) ClockLinearCounter() {
+	if t.linearReloadRequest {
+		t.linearCounter = t.linearReloadValue // Reload the counter
+	} else if t.linearCounter > 0 {
+		t.linearCounter-- // Decrement if not reloading
+	}
+
+	// If the control flag (length halt bit) is clear, clear the reload request flag
+	if !t.lengthHalted {
+		t.linearReloadRequest = false
+	}
+}
+
+// ClockLengthCounter advances the length counter state. Called by frame counter.
+func (t *TriangleChannel) ClockLengthCounter() {
+	if !t.lengthHalted && t.lengthCounter > 0 {
+		t.lengthCounter--
+	}
+}
+
+// SetEnabled enables or disables the channel.
+func (t *TriangleChannel) SetEnabled(enabled bool) {
+	t.enabled = enabled
+	if !enabled {
+		t.lengthCounter = 0 // Disabling clears the length counter
+		t.linearCounter = 0 // Disabling might also clear the linear counter? Unclear, let's clear it.
+	}
+}
+
+// IsLengthCounterActive returns true if the length counter is non-zero. Used for $4015 status.
+func (t *TriangleChannel) IsLengthCounterActive() bool {
+	return t.lengthCounter > 0
+}
+
+// Output calculates the current audio sample based on the channel's state.
+// The triangle channel outputs its sequence value directly (0-15).
+func (t *TriangleChannel) Output() float32 {
+	// Muting conditions:
+	// 1. Channel disabled (handled by APU potentially, or check here?) Let's check here.
+	if !t.enabled {
+		return 0.0
+	}
+	// 2. Linear counter is zero OR Length counter is zero
+	if t.linearCounter == 0 || t.lengthCounter == 0 {
+		return 0.0
+	}
+	// 3. Timer period too low? Some sources say < 2 mutes.
+	if t.timerPeriod < 2 { // Let's mute for periods 0 and 1.
+		return 0.0
+	}
+
+	// Get the sample value from the sequence table
+	sampleValue := TriangleSequence[t.sequencePosition]
+
+	// Normalize to 0.0 - 1.0 range
+	output := float32(sampleValue) / 15.0
+
+	// Smoothing? Triangle wave is pure, maybe no smoothing needed?
+	// Let's skip smoothing for simplicity/purity unless artifacts are bad.
+	// t.lastOutput = output * 0.1 + t.lastOutput * 0.9 // Example smoothing
+	t.lastOutput = output // No smoothing for now
+
+	return t.lastOutput
 }

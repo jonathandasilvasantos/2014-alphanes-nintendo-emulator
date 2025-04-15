@@ -1,160 +1,164 @@
 // File: apu/channels/noise.go
 package channels
 
-// NOISE_PERIOD_TABLE defines the NTSC periods for the noise channel.
-var NOISE_PERIOD_TABLE = [16]uint16{
+// Noise channel period lookup table (NTSC values)
+// Indexed by the lower 4 bits of register $400E.
+var NoisePeriodTable = [16]uint16{
 	4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068,
-}
+} // These are CPU cycles / 2 (APU cycles)
 
 // NoiseChannel represents the noise generator channel in the NES APU.
 type NoiseChannel struct {
 	enabled       bool
-	mode          bool          // Determines the length of the shift register sequence (mode 0 = long, mode 1 = short)
-	shiftRegister uint16        // The shift register used to generate the noise
-	period        uint16        // Current period (from NOISE_PERIOD_TABLE)
-	timer         uint16        // Timer to determine when to clock the shift register
-	volume        byte          // Fixed volume (if not using envelope)
-	lengthCount   byte          // Length counter to control note duration
-	envelope      EnvelopeUnit  // Envelope generator for volume control
-	useEnvelope   bool          // Flag to indicate whether to use envelope or fixed volume
-	lastSample    float32       // For smoothing the output
+	mode          bool // False: 15-bit (mode 0), True: 7-bit (mode 1, period 93)
+	shiftRegister uint16 // 15-bit linear feedback shift register (LFSR)
+
+	// Timer/Period
+	timerPeriod uint16 // Period reload value from NoisePeriodTable
+	timerValue  uint16 // Current timer countdown value
+
+	// Length Counter
+	lengthCounter byte // Counts down to zero to silence channel
+	lengthHalted  bool // Also envelope loop flag
+
+	// Envelope Generator
+	envelope EnvelopeUnit
+
+	// Output cache
+	lastOutput float32
 }
 
 // NewNoiseChannel creates and initializes a new NoiseChannel.
 func NewNoiseChannel() *NoiseChannel {
-	return &NoiseChannel{
-		enabled:       false,
-		mode:          false,
-		shiftRegister: 1,     // Initialized to 1
-		period:        0,
-		timer:         0,
-		volume:        15,
-		lengthCount:   0,
-		envelope: EnvelopeUnit{
-			value:      15,
-			divider:    0,
-			counter:    0,
-			decayLevel: 15,
-		},
-		useEnvelope: false,
-		lastSample:  0.0,
-	}
+	n := &NoiseChannel{}
+	n.Reset()
+	return n
 }
 
-// WriteRegister handles writes to the noise channel's registers.
-func (n *NoiseChannel) WriteRegister(addr uint16, value byte) {
-	switch addr & 3 {
-	case 0: // $400C: Envelope and length counter halt
-		n.useEnvelope = (value & 0x10) == 0
-		if n.useEnvelope {
-			n.envelope.value = value & 0x0F
-			n.envelope.SetStart(true)
-		} else {
-			n.volume = value & 0x0F
-		}
-		n.envelope.loop = (value & 0x20) != 0
-	case 2: // $400E: Period and mode
-		n.mode = (value & 0x80) != 0
-		periodIndex := value & 0x0F
-		n.period = NOISE_PERIOD_TABLE[periodIndex]
-	case 3: // $400F: Length counter load and envelope restart
-		if n.enabled {
-			n.lengthCount = LengthTable[value>>3]
-		}
-		n.envelope.SetStart(true)
-	}
-}
-
-// Clock advances the noise channel's internal state (timer and shift register).
-func (n *NoiseChannel) Clock() {
-	if n.timer > 0 {
-		n.timer--
-	}
-
-	if n.timer == 0 {
-		n.timer = n.period
-
-		// Calculate feedback based on the mode
-		var feedback uint16
-		if n.mode {
-			// Short mode (93-bit sequence): XOR bits 6 and 0
-			feedback = ((n.shiftRegister >> 6) & 0x01) ^ (n.shiftRegister & 0x01)
-		} else {
-			// Long mode (32767-bit sequence): XOR bits 1 and 0
-			feedback = ((n.shiftRegister >> 1) & 0x01) ^ (n.shiftRegister & 0x01)
-		}
-
-		// Update the shift register
-		n.shiftRegister = (n.shiftRegister >> 1) | (feedback << 14)
-	}
-}
-
-// GetSample returns the current output sample for the noise channel.
-func (n *NoiseChannel) GetSample() float32 {
-	if !n.enabled || n.lengthCount == 0 {
-		// Smoothly fade to silence
-		n.lastSample *= 0.99
-		return n.lastSample
-	}
-
-	var targetSample float32
-	// Output is based on the last bit of the shift register.
-	if (n.shiftRegister & 0x01) == 0 {
-		if n.useEnvelope {
-			targetSample = float32(n.envelope.decayLevel) / 15.0
-		} else {
-			targetSample = float32(n.volume) / 15.0
-		}
-	} else {
-		targetSample = 0.0
-	}
-
-	// Smooth the transition between samples
-	n.lastSample = n.lastSample*0.7 + targetSample*0.3
-
-	return n.lastSample
-}
-
-// SetEnabled enables or disables the noise channel.
-func (n *NoiseChannel) SetEnabled(enabled bool) {
-	if n.enabled != enabled {
-		n.enabled = enabled
-		if !enabled {
-			n.lengthCount = 0
-			n.lastSample = 0.0 // Reset sample on disable
-		}
-	}
-}
-
-// ClockLengthCounter decrements the length counter if enabled and not halted.
-func (n *NoiseChannel) ClockLengthCounter() {
-	if n.enabled && n.lengthCount > 0 && !n.envelope.loop {
-		n.lengthCount--
-	}
-}
-
-// ClockEnvelope clocks the envelope unit.
-func (n *NoiseChannel) ClockEnvelope() {
-	if n.useEnvelope {
-		n.envelope.Clock()
-	}
-}
-
-// IsEnabled returns whether the noise channel is currently enabled.
-func (n *NoiseChannel) IsEnabled() bool {
-	return n.enabled
-}
-
-// Reset initializes the noise channel to its default power-up state
+// Reset initializes the noise channel to its power-up state.
 func (n *NoiseChannel) Reset() {
 	n.enabled = false
 	n.mode = false
-	n.shiftRegister = 1 // Initialized to 1
-	n.period = 0
-	n.timer = 0
-	n.volume = 15
-	n.lengthCount = 0
+	n.shiftRegister = 1 // LFSR must be initialized to a non-zero value, 1 is standard.
+	n.timerPeriod = NoisePeriodTable[0]
+	n.timerValue = n.timerPeriod
+	n.lengthCounter = 0
+	n.lengthHalted = false
 	n.envelope.Reset()
-	n.useEnvelope = false
-	n.lastSample = 0.0
+	n.lastOutput = 0.0
+}
+
+// WriteRegister handles writes to the noise channel's registers ($400C-$400F).
+func (n *NoiseChannel) WriteRegister(addr uint16, value byte) {
+	reg := addr & 3 // Register index (0-3)
+
+	switch reg {
+	case 0: // $400C: Length Halt, Envelope settings
+		n.lengthHalted = (value & 0x20) != 0 // Bit 5: Length counter halt / Envelope loop
+		n.envelope.loop = n.lengthHalted    // Envelope loop flag shares bit 5
+		n.envelope.constant = (value & 0x10) != 0 // Bit 4: Constant volume / Envelope disable
+		n.envelope.dividerPeriod = value & 0x0F    // Bits 0-3: Envelope period/divider reload value
+
+	case 1: // $400D: Unused
+
+	case 2: // $400E: Mode, Period select
+		n.mode = (value & 0x80) != 0 // Bit 7: Mode flag
+		periodIndex := value & 0x0F
+		n.timerPeriod = NoisePeriodTable[periodIndex]
+
+	case 3: // $400F: Length counter load, Envelope reset
+		if n.enabled {
+			n.lengthCounter = LengthTable[(value>>3)&0x1F] // Load length counter if channel is enabled
+		}
+		// Writing to $400F restarts the envelope
+		n.envelope.start = true
+	}
+}
+
+// ClockTimer advances the channel's timer by one APU clock cycle (half a CPU cycle).
+// When the timer reaches zero, it reloads and clocks the shift register.
+func (n *NoiseChannel) ClockTimer() {
+	if n.timerValue == 0 {
+		n.timerValue = n.timerPeriod // Reload timer
+		n.clockShiftRegister()       // Clock the LFSR
+	} else {
+		n.timerValue--
+	}
+}
+
+// clockShiftRegister advances the state of the 15-bit LFSR.
+func (n *NoiseChannel) clockShiftRegister() {
+	// Calculate feedback bit based on mode
+	var feedbackBit uint16
+	if n.mode { // Mode 1 (period 93 taps)
+		// Feedback is XOR of bits 0 and 6
+		feedbackBit = (n.shiftRegister & 0x0001) ^ ((n.shiftRegister >> 6) & 0x0001)
+	} else { // Mode 0 (period 32767 taps)
+		// Feedback is XOR of bits 0 and 1
+		feedbackBit = (n.shiftRegister & 0x0001) ^ ((n.shiftRegister >> 1) & 0x0001)
+	}
+
+	// Shift the register right by 1
+	n.shiftRegister >>= 1
+
+	// Place the feedback bit into bit 14
+	n.shiftRegister |= (feedbackBit << 14)
+}
+
+// ClockEnvelope advances the envelope generator state. Called by frame counter.
+func (n *NoiseChannel) ClockEnvelope() {
+	n.envelope.Clock()
+}
+
+// ClockLengthCounter advances the length counter state. Called by frame counter.
+func (n *NoiseChannel) ClockLengthCounter() {
+	if !n.lengthHalted && n.lengthCounter > 0 {
+		n.lengthCounter--
+	}
+}
+
+// SetEnabled enables or disables the channel.
+func (n *NoiseChannel) SetEnabled(enabled bool) {
+	n.enabled = enabled
+	if !enabled {
+		n.lengthCounter = 0 // Disabling clears the length counter
+	}
+}
+
+// IsLengthCounterActive returns true if the length counter is non-zero. Used for $4015 status.
+func (n *NoiseChannel) IsLengthCounterActive() bool {
+	return n.lengthCounter > 0
+}
+
+// Output calculates the current audio sample based on the channel's state.
+func (n *NoiseChannel) Output() float32 {
+	// --- Muting conditions ---
+	// 1. Channel disabled
+	if !n.enabled {
+		return 0.0
+	}
+	// 2. Length counter is zero
+	if n.lengthCounter == 0 {
+		return 0.0
+	}
+	// 3. LFSR bit 0 is 1 (output is 0 when bit 0 is 1)
+	if (n.shiftRegister & 0x0001) != 0 {
+		return 0.0
+	}
+
+	// --- Calculate Volume ---
+	var volume byte
+	if n.envelope.constant {
+		volume = n.envelope.dividerPeriod // Use constant volume level
+	} else {
+		volume = n.envelope.decayLevel // Use envelope decay level
+	}
+
+	// Noise channel output is digital (either 0 or volume)
+	output := float32(volume) / 15.0 // Normalize volume to 0.0 - 1.0
+
+	// No smoothing usually applied to noise
+	n.lastOutput = output
+
+	return n.lastOutput
 }

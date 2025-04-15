@@ -1,5 +1,5 @@
 /*
-Copyright 2014, 2015 Jonathan da Silva SAntos
+Copyright 2014, 2015 Jonathan da Silva Santos
 
 This file is part of Alphanes.
 
@@ -20,7 +20,7 @@ package main
 
 import (
 	"fmt"
-	"log" // <<<--- IMPORT LOG
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -39,7 +39,7 @@ const (
 	// Target frame rate is 60 FPS (NTSC)
 	framesPerSecond = 60
 
-	// CPU cycles per frame = CPU frequency / frames per second (approximately)
+	// CPU cycles per frame = CPU frequency / frames per second
 	cpuCyclesPerFrame = cpuFrequency / framesPerSecond
 
 	// Duration of one frame in nanoseconds
@@ -47,19 +47,22 @@ const (
 
 	// PPU runs at 3x the CPU clock rate
 	ppuCyclesPerCpuCycle = 3
+	
+	// Batch size for PPU processing - increased for better performance without threading
+	ppuBatchSize = 32
 )
 
 type Emulator struct {
 	Running        bool
 	Paused         bool
-	frameStartTime time.Time
 	cycleCount     uint64 // Global cycle counter
+	frameTimer     *time.Ticker
 }
 
 var (
 	Cart     cartridge.Cartridge
 	Nescpu   cpu.CPU
-	Nesppu   *ppu.PPU // <<<--- CHANGED TO POINTER TYPE *ppu.PPU
+	Nesppu   *ppu.PPU
 	Nesio    ioports.IOPorts
 	Debug    debug.Debug
 	PPUDebug debug.PPUDebug
@@ -67,6 +70,9 @@ var (
 )
 
 func main() {
+	// Defer cleanup operations to ensure they run at program exit
+	defer cleanup()
+
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: alphanes <rom-file> [debug-file]")
 		os.Exit(1)
@@ -75,6 +81,17 @@ func main() {
 	fmt.Println("Loading " + os.Args[1])
 	Cart = cartridge.LoadRom(os.Args[1])
 
+	// Setup debug if needed
+	setupDebugMode()
+
+	// Initialize components
+	initializeEmulator()
+
+	// Start emulation
+	emulate()
+}
+
+func setupDebugMode() {
 	// Handle debug mode
 	if len(os.Args) >= 3 && strings.Contains(string(os.Args[2]), ".debug") {
 		fmt.Printf("Debug mode is on\n")
@@ -89,51 +106,55 @@ func main() {
 		PPUDebug = debug.OpenPPUDumpFile(os.Args[2])
 		PPUDebug.Enable = true
 	}
+}
 
+func initializeEmulator() {
 	// Initialize CPU first
 	Nescpu = cpu.StartCPU()
+	
 	// Initialize IOPorts using the loaded Cartridge
-	Nesio = ioports.StartIOPorts(&Cart) // <<<--- INITIALIZE Nesio HERE
-	Nescpu.IO = Nesio                   // Assign initialized IO to CPU
+	Nesio = ioports.StartIOPorts(&Cart)
+	Nescpu.IO = Nesio
 	Nescpu.D = Debug
 	Nescpu.D.Verbose = true
 
-	// Set Reset Vector *after* loading the ROM and initializing the CPU
+	// Set Reset Vector after loading the ROM and initializing the CPU
 	cpu.SetResetVector(&Nescpu, &Cart)
 
-	// DEBUG: Print PC after SetResetVector
-	fmt.Printf("PC after SetResetVector: %04X\n", Nescpu.PC)
+	fmt.Printf("PC after SetResetVector: %04X\nPRG[0x3FFC]: %02X\nPRG[0x3FFD]: %02X\n", 
+		Nescpu.PC, Cart.PRG[0x3FFC], Cart.PRG[0x3FFD])
 
 	// Initialize PPU
 	var errPPU error
-	Nesppu, errPPU = ppu.StartPPU(&Nescpu.IO, &Cart) // <<<--- FIXED: Assign to Nesppu pointer, pass &Nescpu.IO and &Cart, capture error
-	if errPPU != nil {                              // <<<--- FIXED: Check error
+	Nesppu, errPPU = ppu.StartPPU(&Nescpu.IO, &Cart)
+	if errPPU != nil {
 		log.Fatalf("Failed to initialize PPU: %v", errPPU)
 	}
-	// Nesppu.D = &PPUDebug // <<<--- REMOVED/COMMENTED: PPU struct has no 'D' field
 
-	// Link PPU to CPU (if CPU needs a direct reference, currently PPU has IO ref)
-	Nescpu.SetPPU(Nesppu) // <<<--- ADDED: Assumes a SetPPU method exists in cpu.go
+	// Link PPU to CPU
+	Nescpu.SetPPU(Nesppu)
 
-	// DEBUG: Print contents of cart.PRG around the reset vector
-	fmt.Printf("PRG[0x3FFC]: %02X\n", Cart.PRG[0x3FFC])
-	fmt.Printf("PRG[0x3FFD]: %02X\n", Cart.PRG[0x3FFD])
-
-	// Start emulation
+	// Initialize emulator state
 	Alphanes = Emulator{
-		Running:        true,
-		Paused:         false,
-		frameStartTime: time.Now(),
-		cycleCount:     0,
+		Running:    true,
+		Paused:     false,
+		cycleCount: 0,
+	}
+}
+
+func cleanup() {
+	// Stop frame timer if it exists
+	if Alphanes.frameTimer != nil {
+		Alphanes.frameTimer.Stop()
 	}
 
-	emulate()
-
-	// Cleanup
+	// Cleanup CPU APU
 	if Nescpu.APU != nil {
 		Nescpu.APU.Shutdown()
 	}
-	if Nesppu != nil { // <<<--- ADDED: Cleanup PPU SDL resources
+	
+	// Cleanup PPU SDL resources
+	if Nesppu != nil {
 		Nesppu.Cleanup()
 	}
 }
@@ -149,58 +170,95 @@ func emulate() {
 		}
 	}
 
+	// Use a ticker for precise frame timing
+	frameTicker := time.NewTicker(frameTime)
+	defer frameTicker.Stop()
+	
+	cyclesThisFrame := uint64(0)
+	frameCount := uint64(0)
+	
+	// Performance monitoring variables
+	lastPerformanceReport := time.Now()
+	framesProcessed := uint64(0)
+	
+	// Main emulation loop
 	for Alphanes.Running && Nescpu.Running {
 		if !Alphanes.Paused {
-			tick()
-		} else {
-			// Handle keyboard input even when paused (e.g., to unpause)
-			if Nesppu != nil {
-				Nesppu.CheckKeyboard() // Assuming CheckKeyboard exists in PPU for quit events
+			// Process a batch of CPU cycles
+			batchSize := ppuBatchSize
+			if cyclesThisFrame + uint64(batchSize) > cpuCyclesPerFrame {
+				// Don't exceed cycles per frame
+				batchSize = int(cpuCyclesPerFrame - cyclesThisFrame)
 			}
-			time.Sleep(16 * time.Millisecond) // Prevent busy-waiting when paused
-		}
-	}
-}
-
-func tick() {
-	// Execute one CPU cycle
-	cpu.Process(&Nescpu, &Cart) // Process handles internal cycle counting
-
-	// Execute 3 PPU cycles for each CPU cycle
-	for i := 0; i < ppuCyclesPerCpuCycle; i++ {
-		ppu.Process(Nesppu) // <<<--- FIXED: Pass pointer Nesppu, remove Cart argument
-		if Nesppu != nil {
-			// Pass the global cycle count for potential PPU timing? Not typically needed directly.
-		}
-	}
-
-	// Pass the global cycle count to the APU
-	if Nescpu.APU != nil {
-		Nescpu.APU.Clock(Alphanes.cycleCount)
-	}
-
-	// Increment global cycle count
-	Alphanes.cycleCount++
-
-	// Check if we've completed a frame (timing based on PPU frames is more accurate)
-	// If Nesppu indicates frame is complete, handle timing. PPU runs 262 scanlines * 341 cycles.
-	// Let's stick to the CPU-based timing for now, but PPU frame completion is better.
-	if Alphanes.cycleCount%cpuCyclesPerFrame == 0 { // Approximate frame boundary
-		// Calculate how long this frame took
-		elapsed := time.Since(Alphanes.frameStartTime)
-
-		// If we completed the frame too quickly, sleep for the remaining time
-		if elapsed < frameTime {
-			time.Sleep(frameTime - elapsed)
-		}
-
-		// Start timing the next frame
-		Alphanes.frameStartTime = time.Now()
-
-		// Check keyboard input once per frame (or more often if needed)
-		if Nesppu != nil {
-			// Moved CheckKeyboard to VBlank in PPU.Process for better timing
-			// Nesppu.CheckKeyboard()
+			
+			if batchSize > 0 {
+				// Process CPU and PPU cycles in a single optimized batch
+				for i := 0; i < batchSize; i++ {
+					// Execute one CPU cycle
+					cpu.Process(&Nescpu, &Cart)
+					
+					// Execute PPU cycles (3 per CPU cycle)
+					for j := 0; j < ppuCyclesPerCpuCycle; j++ {
+						ppu.Process(Nesppu)
+					}
+					
+					// Update APU - Optional: could be moved outside the inner loop
+					// for better performance if timing precision is less critical
+					if Nescpu.APU != nil {
+						Nescpu.APU.Clock()
+					}
+					
+					// Increment global cycle count
+					Alphanes.cycleCount++
+				}
+				
+				cyclesThisFrame += uint64(batchSize)
+			}
+			
+			// Check if we've completed a frame
+			if cyclesThisFrame >= cpuCyclesPerFrame {
+				// Wait for the next frame tick for consistent timing
+				<-frameTicker.C
+				
+				// Process input once per frame for better performance
+				if Nesppu != nil {
+					Nesppu.CheckKeyboard()
+				}
+				
+				cyclesThisFrame = 0
+				frameCount++
+				framesProcessed++
+				
+				// Performance reporting every 5 seconds
+				if time.Since(lastPerformanceReport) >= 5*time.Second {
+					timeElapsed := time.Since(lastPerformanceReport).Seconds()
+					fps := float64(framesProcessed) / timeElapsed
+					
+					// Calculate CPU cycles per second for performance metrics
+					cyclesPerSecond := float64(framesProcessed * cpuCyclesPerFrame) / timeElapsed
+					cpuPercentage := (cyclesPerSecond / float64(cpuFrequency)) * 100
+					
+					fmt.Printf("Performance: %.2f FPS (target: %d) - CPU utilization: %.1f%%\n", 
+						fps, framesPerSecond, cpuPercentage)
+					
+					lastPerformanceReport = time.Now()
+					framesProcessed = 0
+				}
+			}
+		} else {
+			// When paused, just check for input occasionally and sleep to avoid CPU usage
+			if Nesppu != nil {
+				Nesppu.CheckKeyboard()
+			}
+			
+			// Consume any frame ticks while paused
+			select {
+			case <-frameTicker.C:
+				// Tick consumed
+			default:
+				// No pending tick, sleep a bit
+				time.Sleep(16 * time.Millisecond)
+			}
 		}
 	}
 }
