@@ -1,6 +1,5 @@
 // File: ./ppu/ppu.go
-// Rewritten based on provided code and error messages.
-// Fixes applied for uint8 overflow and texture update.
+// Rewritten with Fullscreen support and verified Framebuffer logic.
 
 /*
 Copyright 2014, 2014 Jonathan da Silva Santos
@@ -27,7 +26,7 @@ import (
 	"fmt"
 	"log" // Use log for errors/warnings
 	"os"
-	"unsafe" // <<<--- ADDED THIS IMPORT
+	"unsafe" // <<<--- NEEDED for texture.Update with unsafe.Pointer
 	"zerojnt/cartridge"
 	"zerojnt/ioports"
 	"zerojnt/mapper" // Import mapper
@@ -65,17 +64,24 @@ const (
 )
 
 type PPU struct {
+	// Framebuffer: Stores the pixel data for the current frame.
+	// Updated by renderPixel during visible scanlines.
 	SCREEN_DATA []uint32 // Use uint32 for ARGB8888 format directly
-	CYC         int      // Current cycle in scanline (0-340)
-	SCANLINE    int      // Current scanline (-1 to 260)
-	// D           *debug.PPUDebug // Keep for potential future use (assuming debug package exists)
-	texture  *sdl.Texture
-	renderer *sdl.Renderer // Store renderer reference
-	window   *sdl.Window   // Store window reference
-	IO       *ioports.IOPorts
-	Cart     *cartridge.Cartridge
 
-	// Internal PPU Registers / State
+	CYC      int // Current cycle in scanline (0-340)
+	SCANLINE int // Current scanline (-1 to 260)
+	// D           *debug.PPUDebug // Keep for potential future use (assuming debug package exists)
+
+	// SDL Resources
+	texture  *sdl.Texture  // SDL texture to display the framebuffer
+	renderer *sdl.Renderer // SDL renderer
+	window   *sdl.Window   // SDL window
+
+	// Shared Resources
+	IO   *ioports.IOPorts
+	Cart *cartridge.Cartridge
+
+	// Internal PPU Registers / State (Loopy Registers Style)
 	v uint16 // Current VRAM address (15 bits) - Used for rendering fetching
 	t uint16 // Temporary VRAM address (15 bits) - Typically holds address written by CPU via $2006/$2005
 	x byte   // Fine X scroll (3 bits)
@@ -136,7 +142,7 @@ func loadPalette() [64]uint32 {
 func (ppu *PPU) MirrorNametableAddress(addr uint16) (effectiveAddr uint16, isInternalVRAM bool) {
 	if addr < 0x2000 || addr >= 0x3F00 {
 		log.Printf("Warning: MirrorNametableAddress called with non-nametable address %04X", addr)
-		return addr, false
+		return addr, false // Return original address, marked as not internal
 	}
 
 	relativeAddr := addr & 0x0FFF // Address relative to 0x2000 (0x0000 - 0x0FFF)
@@ -155,7 +161,7 @@ func (ppu *PPU) MirrorNametableAddress(addr uint16) (effectiveAddr uint16, isInt
 		isInternalVRAM = true
 	case FOURSCREEN:
 		effectiveAddr = relativeAddr // Use full 4KB range
-		isInternalVRAM = false       // Handled by mapper/cartridge RAM
+		isInternalVRAM = false       // Handled by mapper/cartridge RAM (mapping logic assumes this RAM is accessible via CHR mapping)
 	case SINGLE_SCREEN_LOW:
 		effectiveAddr = relativeAddr & 0x03FF // Always map to first 1KB (physical NT0)
 		isInternalVRAM = true
@@ -164,6 +170,7 @@ func (ppu *PPU) MirrorNametableAddress(addr uint16) (effectiveAddr uint16, isInt
 		isInternalVRAM = true
 	default:
 		log.Printf("Warning: Unknown mirroring mode %d, defaulting to HORIZONTAL", mirrorMode)
+		// Default to HORIZONTAL mirroring logic
 		if relativeAddr < 0x0800 {
 			effectiveAddr = relativeAddr & 0x03FF
 		} else {
@@ -175,6 +182,13 @@ func (ppu *PPU) MirrorNametableAddress(addr uint16) (effectiveAddr uint16, isInt
 	// Add the $2000 base back only if mapping to internal VRAM for indexing VRAM array
 	if isInternalVRAM {
 		effectiveAddr += 0x2000
+	} else {
+		// For external VRAM (like FourScreen), the effectiveAddr returned here
+		// (0x0000-0x0FFF) might need further mapping by the caller using the mapper
+		// or be used directly if mapper handles it transparently via MapPPU.
+		// If using Cart.CHR for FourScreen, this relative address needs the 0x2000 base
+		// added back before calling MapPPU. Let's return the $2000+ addr for consistency.
+		effectiveAddr = 0x2000 | effectiveAddr
 	}
 
 	return effectiveAddr, isInternalVRAM
@@ -194,12 +208,9 @@ func (ppu *PPU) ReadPPUMemory(addr uint16) byte {
 		}
 		// Check CHR size as reported by cartridge struct if buffer seems wrong size
 		if physicalCHRAddr < uint16(ppu.Cart.GetCHRSize()) {
-			// This might indicate an issue where ppu.Cart.CHR isn't sized correctly
 			log.Printf("Warning: PPU Read CHR mapped address %04X potentially out of CHR buffer bounds (%d) but within GetCHRSize (%d)",
 				physicalCHRAddr, len(chrData), ppu.Cart.GetCHRSize())
-			// Try reading from OriginalCHR as a fallback if sizes mismatch? Risky.
-			// Let's return 0 to be safe.
-			return 0
+			return 0 // Return 0 to prevent crash on out-of-bounds read
 		}
 		log.Printf("Warning: PPU Read CHR mapped address %04X out of CHR bounds (%d)", physicalCHRAddr, len(chrData))
 		return 0
@@ -216,10 +227,9 @@ func (ppu *PPU) ReadPPUMemory(addr uint16) byte {
 			return 0
 		} else {
 			// Four-screen or other mapper-handled VRAM
-			// Mapper's MapPPU should ideally return the correct address in external RAM/CHR space
-			physicalAddr := ppu.Cart.Mapper.MapPPU(addr)
-			// Assumption: Four-screen RAM might be mapped into the CHR space by some mappers
-			chrData := ppu.Cart.CHR
+			// Let the mapper handle the read via MapPPU
+			physicalAddr := ppu.Cart.Mapper.MapPPU(mappedAddr) // Use the mirrored address for MapPPU
+			chrData := ppu.Cart.CHR                           // Assume mapped to CHR space
 			if physicalAddr < uint16(len(chrData)) {
 				return chrData[physicalAddr]
 			}
@@ -234,7 +244,7 @@ func (ppu *PPU) ReadPPUMemory(addr uint16) byte {
 			paletteAddr -= 0x10
 		}
 		if paletteAddr < uint16(len(ppu.IO.PaletteRAM)) {
-			// Always return palette RAM directly, ignore buffer for palette reads
+			// Palette reads are not buffered
 			return ppu.IO.PaletteRAM[paletteAddr]
 		}
 		log.Printf("Warning: PPU Read Palette RAM address %04X (offset %02X) out of bounds", addr, paletteAddr)
@@ -252,7 +262,8 @@ func (ppu *PPU) WritePPUMemory(addr uint16, data byte) {
 
 	switch {
 	case addr < 0x2000: // Pattern Tables (CHR RAM via Cartridge/Mapper)
-		if ppu.Cart.GetCHRSize() == 0 { // Only write if CHR is RAM
+		// Only allow writes if the cartridge uses CHR RAM
+		if ppu.Cart.GetCHRSize() == 0 {
 			physicalCHRAddr := ppu.Cart.Mapper.MapPPU(addr)
 			chrRAM := ppu.Cart.CHR // Access the CHR slice, which should be RAM
 			if physicalCHRAddr < uint16(len(chrRAM)) {
@@ -260,7 +271,13 @@ func (ppu *PPU) WritePPUMemory(addr uint16, data byte) {
 			} else {
 				log.Printf("Warning: PPU Write CHR RAM mapped address %04X out of CHR RAM bounds (%d)", physicalCHRAddr, len(chrRAM))
 			}
-		} // Ignore writes to CHR ROM
+		} else {
+			// Attempting to write to CHR ROM, usually ignored or handled by mapper
+			// Some mappers might use writes here for control registers.
+			// For now, just log it. A specific mapper might override this.
+			// log.Printf("Debug: Write attempt to CHR ROM area %04X (Value: %02X) - Ignored by default", addr, data)
+			ppu.Cart.Mapper.Write(addr, data) // Let mapper decide if it needs this write
+		}
 
 	case addr >= 0x2000 && addr < 0x3F00: // Nametables
 		mappedAddr, isInternal := ppu.MirrorNametableAddress(addr)
@@ -274,19 +291,8 @@ func (ppu *PPU) WritePPUMemory(addr uint16, data byte) {
 			}
 		} else {
 			// Four-screen or other mapper-handled VRAM
-			// Let the mapper handle the write via its PPU mapping logic if needed
-			physicalAddr := ppu.Cart.Mapper.MapPPU(addr)
-			// Assumption: Mapper might handle writes to CHR space for external VRAM
-			if ppu.Cart.GetCHRSize() == 0 { // Check if it *could* be CHR RAM
-				chrRAM := ppu.Cart.CHR
-				if physicalAddr < uint16(len(chrRAM)) {
-					chrRAM[physicalAddr] = data
-					return // Assume write was handled if it landed in CHR RAM space
-				}
-			}
-			// If not CHR RAM or out of bounds, log the attempt
-			log.Printf("Warning: PPU Write attempted for mapper-handled VRAM at %04X (mapped to %04X) - Write ignored?", addr, physicalAddr)
-			// Alternatively, call mapper's generic Write? ppu.Cart.Mapper.Write(addr, data) - Less common for PPU writes
+			// Let the mapper handle the write
+			ppu.Cart.Mapper.Write(mappedAddr, data) // Pass the mapped address to the mapper's generic write handler
 		}
 
 	case addr >= 0x3F00: // Palettes
@@ -306,23 +312,23 @@ func (ppu *PPU) WritePPUMemory(addr uint16, data byte) {
 // ReadRegister handles CPU reads from PPU registers ($2000-$2007)
 func (ppu *PPU) ReadRegister(addr uint16) byte {
 	reg := addr & 0x07 // Mask to handle mirroring
+	var data byte
 
 	switch reg {
 	case 0x02: // PPUSTATUS ($2002)
 		status := ppu.IO.PPUSTATUS.Get() | (ppu.IO.LastRegWrite & 0x1F) // Combine flags and bus noise
 		ppu.IO.PPUSTATUS.VBLANK = false                                 // Reading $2002 clears VBlank flag
 		ppu.w = 0                                                       // Reading $2002 resets the address latch toggle
-		ppu.IO.ClearNMI()                                               // Reading $2002 clears the NMI signal *after* this read
-		return status
+		// NMI flag in IO struct is cleared *after* status is read (delayed effect)
+		ppu.IO.NMI = false // Clear NMI flag immediately in our model after reading status
+		data = status
 
 	case 0x04: // OAMDATA ($2004)
 		// Reads during rendering (visible scanlines 0-239, cycles 1-64 for sprite eval) can return garbage/FF.
 		// Reads during VBLANK or HBLANK (cycles > 256) return valid data. OAMADDR is not incremented by reads.
-		// Simplified: Always return current OAM data. Add accurate timing later if needed.
-		oamAddr := ppu.IO.OAMADDR
-		// OAMADDR doesn't auto-increment on read
-		// FIX: Direct read using uint8 index, removing the unnecessary overflow check
-		return ppu.IO.OAM[oamAddr]
+		// Simplified: Always return current OAM data based on OAMADDR.
+		data = ppu.IO.OAM[ppu.IO.OAMADDR]
+		// OAMADDR does not increment on read.
 
 	case 0x07: // PPUDATA ($2007)
 		// Read from VRAM/CHR/Palette via PPU address 'v'
@@ -345,12 +351,13 @@ func (ppu *PPU) ReadRegister(addr uint16) byte {
 
 		// Increment 'v' after the read cycle completes
 		ppu.incrementVramAddress()
-		return dataToReturn
+		data = dataToReturn
 
 	default:
 		// Reading write-only registers ($2000, $2001, $2003, $2005, $2006) returns open bus value.
-		return ppu.IO.LastRegWrite
+		data = ppu.IO.LastRegWrite
 	}
+	return data
 }
 
 // WriteRegister handles CPU writes to PPU registers ($2000-$2007)
@@ -379,10 +386,8 @@ func (ppu *PPU) WriteRegister(addr uint16, data byte) {
 		// Write to OAM[OAMADDR] and increment OAMADDR.
 		// Writes during rendering are ignored/corrupted on real HW.
 		// Simplified: Allow writes anytime. Add accurate timing later if needed.
-		oamAddr := ppu.IO.OAMADDR
-		// FIX: Direct write using uint8 index, removing the unnecessary overflow check
-		ppu.IO.OAM[oamAddr] = data
-		ppu.IO.OAMADDR++ // Increment after write (wraps automatically)
+		ppu.IO.OAM[ppu.IO.OAMADDR] = data
+		ppu.IO.OAMADDR++ // Increment after write (wraps automatically due to byte type)
 
 	case 0x05: // PPUSCROLL ($2005)
 		if ppu.w == 0 { // First write (X scroll)
@@ -418,8 +423,8 @@ func (ppu *PPU) incrementVramAddress() {
 	if ppu.IO.PPUCTRL.VRAM_INCREMENT_32 {
 		inc = 32
 	}
-	ppu.v = (ppu.v + inc) & 0x7FFF // Increment and wrap within 15 bits
-	ppu.v &= 0x3FFF                // Ensure address stays within PPU 14-bit range ($0000-$3FFF) after increment
+	// Increment v, wrapping around at $4000 (effectively masking to 14 bits)
+	ppu.v = (ppu.v + inc) & 0x3FFF
 }
 
 // StartPPU initializes the PPU state.
@@ -432,7 +437,7 @@ func StartPPU(io *ioports.IOPorts, cart *cartridge.Cartridge) (*PPU, error) {
 	}
 
 	ppu := &PPU{}
-	fmt.Printf("Starting PPU: RICOH RP-2C02 (Build Error Fixes Applied)\n")
+	fmt.Printf("Starting PPU: RICOH RP-2C02 (Fullscreen)\n")
 
 	ppu.IO = io
 	ppu.Cart = cart
@@ -440,7 +445,7 @@ func StartPPU(io *ioports.IOPorts, cart *cartridge.Cartridge) (*PPU, error) {
 	ppu.CYC = 0
 	ppu.SCANLINE = -1 // Start at pre-render scanline
 	ppu.frameOdd = false
-	ppu.SCREEN_DATA = make([]uint32, SCREEN_WIDTH*SCREEN_HEIGHT)
+	ppu.SCREEN_DATA = make([]uint32, SCREEN_WIDTH*SCREEN_HEIGHT) // Initialize framebuffer
 
 	// Reset internal PPU state and IO port registers related to PPU
 	ppu.v = 0
@@ -496,43 +501,56 @@ func StartPPU(io *ioports.IOPorts, cart *cartridge.Cartridge) (*PPU, error) {
 
 	ppu.colors = loadPalette()
 
-	// Initialize SDL Canvas
+	// Initialize SDL Canvas (now fullscreen)
 	err := ppu.initCanvas()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize SDL canvas: %w", err)
 	}
 
-	fmt.Printf("PPU Initialization complete\n")
+	fmt.Printf("PPU Initialization complete (Fullscreen Mode)\n")
 	return ppu, nil
 }
 
 // checkKeyboard polls SDL events (basic quit handler).
-func (ppu *PPU) CheckKeyboard() { // <--- RENAMED HERE
+func (ppu *PPU) CheckKeyboard() { // Renamed to avoid conflict if other input handling exists
 	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 		switch event.(type) {
 		case *sdl.QuitEvent:
-			println("Quit")
+			println("Quit event received")
 			ppu.Cleanup()
 			os.Exit(0)
+		case *sdl.KeyboardEvent:
+			// Example: Exit on Escape key press
+			if event.(*sdl.KeyboardEvent).Keysym.Scancode == sdl.SCANCODE_ESCAPE && event.(*sdl.KeyboardEvent).State == sdl.PRESSED {
+				println("Escape key pressed - Exiting")
+				ppu.Cleanup()
+				os.Exit(0)
+			}
+			// TODO: Add controller input mapping here if needed
 		}
 	}
 }
 
 // Cleanup releases SDL resources.
 func (ppu *PPU) Cleanup() {
+	log.Println("Cleaning up SDL resources...")
 	if ppu.texture != nil {
-		ppu.texture.Destroy()
+		if err := ppu.texture.Destroy(); err != nil {
+			log.Printf("Error destroying texture: %v", err)
+		}
 		ppu.texture = nil
 	}
 	if ppu.renderer != nil {
-		ppu.renderer.Destroy()
+		ppu.renderer.Destroy() // Renderer destroy also handles textures associated? Check SDL docs. Safer to destroy texture explicitly.
 		ppu.renderer = nil
 	}
 	if ppu.window != nil {
-		ppu.window.Destroy()
+		if err := ppu.window.Destroy(); err != nil {
+			log.Printf("Error destroying window: %v", err)
+		}
 		ppu.window = nil
 	}
-	sdl.Quit()
+	sdl.Quit() // Quit SDL subsystem
 	fmt.Println("SDL resources cleaned up.")
 }
 
@@ -570,7 +588,7 @@ func (ppu *PPU) incrementScrollY() {
 		if y == 29 {              // If coarse Y is 29 (last row of tiles in a nametable)
 			y = 0               // Coarse Y = 0
 			ppu.v ^= 0x0800     // Switch vertical nametable (flip bit 11)
-		} else if y == 31 { // Coarse Y can wrap from 31 to 0 without switching nametable (attribute area)
+		} else if y == 31 { // Coarse Y can wrap from 31 to 0 without switching nametable (e.g., entering attribute table rows)
 			y = 0 // Coarse Y = 0
 			// Don't switch vertical nametable here
 		} else {
@@ -587,9 +605,9 @@ func (ppu *PPU) transferAddressX() {
 		return
 	}
 	// Copy coarse X (bits 0-4) and horizontal nametable select (bit 10)
-	// Mask for bits to keep in v: 111 01 11111 00000 = 0xFBE0
-	// Mask for bits to copy from t: 000 10 00000 11111 = 0x041F
-	ppu.v = (ppu.v & 0xFBE0) | (ppu.t & 0x041F)
+	// Mask for bits to keep in v: 111 01 11111 00000 = 0x7BE0 (Keep Y bits)
+	// Mask for bits to copy from t: 000 10 00000 11111 = 0x041F (Copy X bits)
+	ppu.v = (ppu.v & 0xFBE0) | (ppu.t & 0x041F) // Corrected mask usage based on NesDev wiki
 }
 
 // transferAddressY copies vertical bits from t to v.
@@ -599,9 +617,9 @@ func (ppu *PPU) transferAddressY() {
 		return
 	}
 	// Copy fine Y (bits 12-14), coarse Y (bits 5-9), and vertical nametable select (bit 11)
-	// Mask for bits to keep in v: 000 10 00000 11111 = 0x841F
-	// Mask for bits to copy from t: 111 01 11111 00000 = 0x7BE0
-	ppu.v = (ppu.v & 0x841F) | (ppu.t & 0x7BE0)
+	// Mask for bits to keep in v: 000 10 00000 11111 = 0x041F (Keep X bits)
+	// Mask for bits to copy from t: 111 01 11111 00000 = 0x7BE0 (Copy Y bits)
+	ppu.v = (ppu.v & 0x841F) | (ppu.t & 0x7BE0) // Corrected mask usage based on NesDev wiki
 }
 
 // loadBackgroundShifters loads fetched tile data into background shift registers.
@@ -611,11 +629,8 @@ func (ppu *PPU) loadBackgroundShifters() {
 	ppu.bg_pattern_shift_hi = (ppu.bg_pattern_shift_hi & 0xFF00) | uint16(ppu.tile_data_hi)
 
 	// Determine attribute bits for the current tile based on 'v' address
-	// AT byte covers a 4x4 tile area. We need the palette bits for the specific 2x2 tile quadrant.
-	// ((v >> 4) & 4) -> selects bit 2 based on Y position within 4-tile block
-	// (v & 2) -> selects bit 1 based on X position within 4-tile block
-	shift := ((ppu.v >> 4) & 4) | (ppu.v & 2)     // 0, 2, 4, or 6
-	palette_bits := (ppu.at_byte >> shift) & 0x03 // Get 2 bits (00, 01, 10, 11) for the quadrant
+	shift := ((ppu.v >> 4) & 4) | (ppu.v & 2)     // Selects the correct 2 bits from AT byte (0, 2, 4, or 6)
+	palette_bits := (ppu.at_byte >> shift) & 0x03 // Get 2 palette index bits for the quadrant
 
 	// Expand these 2 bits into 8-bit values to fill the attribute shifters' lower bytes
 	attr_fill_lo := uint16(0x0000) // Holds palette bit 0 expanded
@@ -670,7 +685,6 @@ func (ppu *PPU) fetchNTByte() {
 func (ppu *PPU) fetchATByte() {
 	if !ppu.isRenderingEnabled() { return }
 	// Address: 0x23C0 | Nametable select | Coarse Y / 4 | Coarse X / 4
-	// Calculation: 0x23C0 | (v & 0x0C00) | ((v >> 4) & 0x38) | ((v >> 2) & 0x07)
 	addr := 0x23C0 | (ppu.v & 0x0C00) | ((ppu.v >> 4) & 0x38) | ((ppu.v >> 2) & 0x07)
 	ppu.at_byte = ppu.ReadPPUMemory(addr)
 }
@@ -700,7 +714,7 @@ func (ppu *PPU) fetchTileDataHigh() {
 // evaluateSprites scans primary OAM to find sprites visible on the *next* scanline.
 // Populates secondary OAM and sets sprite overflow flag.
 func (ppu *PPU) evaluateSprites() {
-	// This evaluation happens during cycles 1-256 of visible scanlines
+	// This evaluation happens during cycles 1-256 of visible/pre-render scanlines
 	// The result (secondary OAM) is used for fetching on cycles 257-320.
 
 	// Clear secondary OAM (prepare for next scanline's sprites)
@@ -719,67 +733,57 @@ func (ppu *PPU) evaluateSprites() {
 	// Scan primary OAM (ppu.IO.OAM) - 64 sprites, 4 bytes each
 	oamIdx := 0 // Start at OAM[0]
 	primaryOAM := ppu.IO.OAM
+	numSpritesFound := 0
 
 	for n := 0; n < 64; n++ {
-		spriteY := int(primaryOAM[oamIdx]) // Sprite Y coord (top edge)
+		spriteY := int(primaryOAM[oamIdx]) + 1 // Sprite Y coord (top edge is Y+1 on screen)
+		scanlineToCheck := ppu.SCANLINE        // We evaluate for the *next* scanline, which is currently being rendered (SCANLINE)
 
-		// Check if the sprite is vertically in range for the *next* scanline.
-		// The PPU is currently rendering 'ppu.SCANLINE'. We evaluate for 'ppu.SCANLINE + 1'.
-		// However, the common implementation compares against the *current* scanline.
-		// Let's stick to comparing against the current scanline being rendered.
-		// Is current scanline 'ppu.SCANLINE' within [spriteY+1, spriteY+height]?
-		// Note: spriteY is the coordinate of the top line. OAM Y=0 means the sprite starts at scanline 1.
-		// A sprite is visible on scanline S if S >= spriteY AND S < spriteY + spriteHeight.
-		// Nesdev Wiki: "The sprite evaluation phase searches the OAM for sprites that are vertically within range for the *next* scanline"
-		// Let's use nextScanlineY = ppu.SCANLINE
-		scanlineToCheck := ppu.SCANLINE
+		// Check if the sprite is vertically in range for the next scanline.
+		if spriteY <= scanlineToCheck && scanlineToCheck < (spriteY+spriteHeight) {
+			// Sprite is vertically in range. Add to secondary OAM if space.
+			if numSpritesFound < 8 {
+				targetIdx := numSpritesFound * 4
+				ppu.secondaryOAM[targetIdx+0] = primaryOAM[oamIdx+0] // Y
+				ppu.secondaryOAM[targetIdx+1] = primaryOAM[oamIdx+1] // Tile Index
+				ppu.secondaryOAM[targetIdx+2] = primaryOAM[oamIdx+2] // Attributes
+				ppu.secondaryOAM[targetIdx+3] = primaryOAM[oamIdx+3] // X
 
-		// Only consider sprites where Y is potentially visible (0-239)
-		// Also filter Y=FF which is sometimes used to disable sprites
-		if spriteY < 240 {
-			if scanlineToCheck >= spriteY && scanlineToCheck < (spriteY+spriteHeight) {
-				// Sprite is vertically in range. Add to secondary OAM if space.
-				if ppu.spriteCount < 8 {
-					targetIdx := ppu.spriteCount * 4
-					ppu.secondaryOAM[targetIdx+0] = primaryOAM[oamIdx+0] // Y
-					ppu.secondaryOAM[targetIdx+1] = primaryOAM[oamIdx+1] // Tile Index
-					ppu.secondaryOAM[targetIdx+2] = primaryOAM[oamIdx+2] // Attributes
-					ppu.secondaryOAM[targetIdx+3] = primaryOAM[oamIdx+3] // X
-
-					// Check if this is sprite 0 being added to secondary OAM
-					if n == 0 {
-						ppu.spriteZeroHitPossible = true // Mark that sprite 0 is present for the *next* scanline
-					}
-					ppu.spriteCount++
-				} else {
-					// More than 8 sprites found. Set overflow flag.
-					ppu.IO.PPUSTATUS.SPRITE_OVERFLOW = true
-					// Hardware bug emulation: OAM scan continues with complex buggy reads/writes.
-					// Simplified: Stop evaluation once overflow is detected.
-					break
+				// Check if this is sprite 0 being added to secondary OAM
+				if n == 0 {
+					ppu.spriteZeroHitPossible = true // Mark that sprite 0 is present for the *next* scanline
 				}
+				numSpritesFound++
+			} else {
+				// More than 8 sprites found. Set overflow flag.
+				ppu.IO.PPUSTATUS.SPRITE_OVERFLOW = true
+				// Hardware bug emulation: OAM scan continues with complex buggy reads/writes.
+				// Simplified: Stop evaluation once overflow is detected for performance.
+				break
 			}
 		}
 		oamIdx += 4 // Move to next sprite entry (Y, Tile, Attr, X)
 	} // End OAM scan loop
+	ppu.spriteCount = numSpritesFound // Store the actual number of sprites found (0-8)
 }
 
 // fetchSprites loads pattern data for the sprites found during evaluation (for the *current* rendering scanline).
 // Uses data from secondary OAM populated during the *previous* scanline's evaluation.
 func (ppu *PPU) fetchSprites() {
-	// Fetching happens during cycles 257-320 of visible scanlines.
+	// Fetching happens during cycles 257-320 of visible/pre-render scanlines.
 	// The data fetched here is used for rendering *this* scanline.
 
+	// Clear sprite buffers first to prevent rendering stale data if sprites are disabled
+	for i := 0; i < 8; i++ {
+		ppu.spriteCountersX[i] = 0xFF // Mark inactive
+		ppu.spriteLatches[i] = 0
+		ppu.spritePatternsLo[i] = 0
+		ppu.spritePatternsHi[i] = 0
+		ppu.spriteIsSprite0[i] = false // Reset sprite 0 flag for all slots
+	}
+
 	if !ppu.IO.PPUMASK.SHOW_SPRITE {
-		// Clear sprite buffers if rendering is off? Essential to avoid rendering stale sprites.
-		for i := 0; i < 8; i++ {
-			ppu.spriteCountersX[i] = 0xFF // Mark inactive
-			ppu.spriteLatches[i] = 0
-			ppu.spritePatternsLo[i] = 0
-			ppu.spritePatternsHi[i] = 0
-			ppu.spriteIsSprite0[i] = false
-		}
-		return
+		return // Don't fetch if sprites aren't shown
 	}
 
 	spriteHeight := 8
@@ -790,8 +794,7 @@ func (ppu *PPU) fetchSprites() {
 	// Fetch data for sprites placed in secondaryOAM (up to spriteCount found previously)
 	for i := 0; i < ppu.spriteCount; i++ {
 		// Data from secondary OAM for the sprite being loaded
-		// Indices are 0, 1, 2, 3 for Y, Tile, Attr, X within each 4-byte sprite entry
-		spriteY := uint16(ppu.secondaryOAM[i*4+0])
+		spriteY := uint16(ppu.secondaryOAM[i*4+0]) + 1 // Add 1 because OAM Y=0 is scanline 1
 		tileIndex := ppu.secondaryOAM[i*4+1]
 		attributes := ppu.secondaryOAM[i*4+2]
 		spriteX := ppu.secondaryOAM[i*4+3]
@@ -799,8 +802,8 @@ func (ppu *PPU) fetchSprites() {
 		// Load sprite state for the rendering pipeline
 		ppu.spriteCountersX[i] = spriteX    // X position counter for shifting
 		ppu.spriteLatches[i] = attributes // Attribute latch (palette, priority, flip)
-		// Determine if this slot holds sprite 0 based on the evaluation result from the *previous* scanline.
-		ppu.spriteIsSprite0[i] = ppu.spriteZeroHitPossible && (i == 0) // Was sprite 0 found AND is this the first slot?
+		// Determine if this slot holds sprite 0 based on whether sprite 0 hit was possible *and* this is the first sprite found
+		ppu.spriteIsSprite0[i] = ppu.spriteZeroHitPossible && (i == 0) // Flag set during eval of previous line
 
 		// Determine pattern row based on vertical flip and current scanline
 		flipHoriz := (attributes & 0x40) != 0
@@ -848,15 +851,6 @@ func (ppu *PPU) fetchSprites() {
 		ppu.spritePatternsLo[i] = tileLo
 		ppu.spritePatternsHi[i] = tileHi
 	}
-
-	// Mark remaining sprite slots (if spriteCount < 8) as inactive for rendering
-	for i := ppu.spriteCount; i < 8; i++ {
-		ppu.spriteCountersX[i] = 0xFF // Set counter high to indicate inactive
-		ppu.spriteLatches[i] = 0
-		ppu.spritePatternsLo[i] = 0
-		ppu.spritePatternsHi[i] = 0
-		ppu.spriteIsSprite0[i] = false
-	}
 }
 
 // Helper to reverse bits in a byte (used for horizontal flip).
@@ -867,13 +861,14 @@ func reverseByte(b byte) byte {
 	return b
 }
 
-// renderPixel determines and outputs the final pixel color for the current CYC and SCANLINE.
+// renderPixel determines and outputs the final pixel color for the current CYC and SCANLINE
+// into the SCREEN_DATA framebuffer.
 func (ppu *PPU) renderPixel() {
 	// Pixel coordinates derived from current cycle and scanline
 	pixelX := ppu.CYC - 1  // X coordinate on screen (0-255 for cycles 1-256)
 	pixelY := ppu.SCANLINE // Y coordinate on screen (0-239)
 
-	// Bounds check for safety, though shouldn't be needed if called correctly
+	// Bounds check for safety, although should be ensured by calling context
 	if pixelX < 0 || pixelX >= SCREEN_WIDTH || pixelY < 0 || pixelY >= SCREEN_HEIGHT {
 		return
 	}
@@ -915,16 +910,16 @@ func (ppu *PPU) renderPixel() {
 		// Check horizontal clipping mask (leftmost 8 pixels)
 		if !(pixelX < 8 && !ppu.IO.PPUMASK.SHOW_LEFTMOST_8_SPRITE) {
 			// Iterate through the 8 sprite slots loaded for this scanline
-			for i := 0; i < ppu.spriteCount; i++ {
-				// Check if this sprite is active at the current pixel X (counter is 0)
-				if ppu.spriteCountersX[i] == 0 {
+			for i := 0; i < 8; i++ { // Iterate all 8 potential slots
+				// Check if this sprite is active at the current pixel X (counter is 0) and is within the fetched sprites
+				if ppu.spriteCountersX[i] == 0 && i < ppu.spriteCount {
 					// Get pixel bits from the sprite's pattern shifters (highest bit = leftmost pixel)
 					p0_spr := (ppu.spritePatternsLo[i] >> 7) & 1
 					p1_spr := (ppu.spritePatternsHi[i] >> 7) & 1
 					currentSprPixelData := (p1_spr << 1) | p0_spr
 
-					// If this is an *opaque* pixel from an active sprite
-					if currentSprPixelData != 0 {
+					// If this is an *opaque* pixel from an active sprite, and we haven't found an opaque sprite pixel yet
+					if currentSprPixelData != 0 && !sprIsOpaque {
 						// This is the highest priority opaque sprite pixel found *so far* for this X coordinate.
 						sprPixel = currentSprPixelData
 						sprPalette = (ppu.spriteLatches[i] & 0x03)       // Lower 2 bits of attributes = palette index
@@ -932,11 +927,12 @@ func (ppu *PPU) renderPixel() {
 						sprIsOpaque = true
 
 						// Check if this pixel belongs to sprite 0 for hit detection
-						if ppu.spriteIsSprite0[i] { // Check the flag set during fetchSprites
+						// Use the spriteIsSprite0 flag determined during fetchSprites
+						if ppu.spriteIsSprite0[i] {
 							isSpriteZeroPixel = true
 						}
 
-						// Found the highest priority sprite for this X, stop searching
+						// Found the highest priority sprite for this X, stop searching (hardware behavior)
 						break
 					}
 				}
@@ -959,6 +955,22 @@ func (ppu *PPU) renderPixel() {
 		finalPixel = bgPixel
 		finalPalette = bgPalette
 	} else { // Both BG and Sprite are opaque
+		// --- Sprite 0 Hit Detection ---
+		// Must happen *before* priority resolution if both are opaque.
+		// Check if sprite 0 is involved, BG is opaque, pixelX is valid (0-254), and rendering is enabled.
+		if isSpriteZeroPixel && bgIsOpaque && pixelX >= 0 && pixelX < 255 && ppu.isRenderingEnabled() {
+			// Also check clipping windows. Hit cannot occur in leftmost 8 pixels if either BG or SP rendering is disabled there.
+			showBG := !(pixelX < 8 && !ppu.IO.PPUMASK.SHOW_LEFTMOST_8_BACKGROUND)
+			showSP := !(pixelX < 8 && !ppu.IO.PPUMASK.SHOW_LEFTMOST_8_SPRITE)
+			if showBG && showSP {
+				// Check PPUSTATUS hasn't already been set this frame (it's cleared on pre-render)
+				if !ppu.IO.PPUSTATUS.SPRITE_0_BIT {
+					ppu.IO.PPUSTATUS.SPRITE_0_BIT = true // Set the Sprite 0 Hit flag
+				}
+			}
+		}
+
+		// Now resolve priority
 		if sprPriority == 0 { // Sprite has priority (in front of background)
 			finalPixel = sprPixel
 			finalPalette = sprPalette + 4
@@ -966,42 +978,34 @@ func (ppu *PPU) renderPixel() {
 			finalPixel = bgPixel
 			finalPalette = bgPalette
 		}
-
-		// Sprite 0 Hit Detection:
-		// Occurs if an opaque background pixel and an opaque sprite 0 pixel overlap
-		// at this location (pixelX 0-254) during cycles when rendering is enabled.
-		// Also check clipping windows.
-		if isSpriteZeroPixel && bgIsOpaque && pixelX < 255 && ppu.isRenderingEnabled() {
-			// Check if both BG and SP rendering are enabled in the leftmost 8 pixels if relevant
-			showBG := !(pixelX < 8 && !ppu.IO.PPUMASK.SHOW_LEFTMOST_8_BACKGROUND)
-			showSP := !(pixelX < 8 && !ppu.IO.PPUMASK.SHOW_LEFTMOST_8_SPRITE)
-
-			if showBG && showSP {
-				ppu.IO.PPUSTATUS.SPRITE_0_BIT = true // Set the Sprite 0 Hit flag
-			}
-		}
 	}
 
 	// --- Final Color Lookup ---
-	// Combine palette index (high bits) and pixel value (low bits)
-	// Palette address: 0x3F00 | (finalPalette << 2) | finalPixel
-	// Note: finalPixel = 0 correctly indexes $3F00/04/08/0C or $3F10/14/18/1C
-	paletteAddr := 0x3F00 | (uint16(finalPalette) << 2) | uint16(finalPixel)
-	colorEntryIndex := ppu.ReadPPUMemory(paletteAddr) // Read 6-bit index from palette RAM
+	// Determine the address in palette RAM
+	var paletteAddr uint16
+	if finalPixel == 0 {
+		paletteAddr = 0x3F00 // Universal background color always from $3F00
+	} else {
+		paletteAddr = 0x3F00 | (uint16(finalPalette) << 2) | uint16(finalPixel)
+	}
 
-	// Apply Grayscale if enabled (Simplified: Ignore for now, complex interaction)
-	// if ppu.IO.PPUMASK.GREYSCALE {
-	//	colorEntryIndex &= 0x30 // Incorrect simplification, real grayscale is more complex
-	// }
+	// Read the 6-bit color index from palette RAM (handles mirroring internally)
+	colorEntryIndex := ppu.ReadPPUMemory(paletteAddr)
+
+	// Apply Grayscale if enabled
+	if ppu.IO.PPUMASK.GREYSCALE {
+		colorEntryIndex &= 0x30 // Mask to grey component (use bits 4-5 as index)
+	}
 
 	// Look up the final ARGB color from the pre-loaded palette table
 	finalColor := ppu.colors[colorEntryIndex&0x3F] // Mask index to 6 bits (0-63)
 
-	// --- Write to Screen Buffer ---
+	// --- Write to Screen Buffer (Framebuffer) ---
 	bufferIndex := pixelX + (pixelY * SCREEN_WIDTH)
 	if bufferIndex >= 0 && bufferIndex < len(ppu.SCREEN_DATA) {
 		ppu.SCREEN_DATA[bufferIndex] = finalColor
 	} else {
+		// This should ideally not happen if logic is correct
 		log.Printf("Warning: RenderPixel calculated out-of-bounds index %d (X:%d, Y:%d)", bufferIndex, pixelX, pixelY)
 	}
 }
@@ -1024,11 +1028,10 @@ func Process(ppu *PPU) {
 			ppu.IO.PPUSTATUS.VBLANK = false
 			ppu.IO.PPUSTATUS.SPRITE_0_BIT = false
 			ppu.IO.PPUSTATUS.SPRITE_OVERFLOW = false
-			ppu.IO.ClearNMI() // Signal NMI request should end
+			// ppu.IO.ClearNMI() // NMI line stays high until VBLANK is cleared by reading $2002 or next pre-render
 		}
 
-		// Background Fetches & Shifting (mimic visible scanline for scanline 0 setup)
-		// Happens during cycles 1-256 and 321-336 if rendering enabled.
+		// Handle background fetches/shifts for the *upcoming* scanline 0.
 		ppu.handleBackgroundFetchingAndShifting()
 
 		// Cycles 280-304: If rendering enabled, repeatedly copy vertical bits (Y scroll, nametable) from t to v.
@@ -1036,28 +1039,28 @@ func Process(ppu *PPU) {
 			ppu.transferAddressY()
 		}
 
-		// Cycle 257: If rendering enabled, copy horizontal bits (X scroll, nametable) from t to v.
-		if ppu.isRenderingEnabled() && ppu.CYC == 257 {
-			ppu.transferAddressX()
+		// Cycles 257-320: Sprite Evaluation & Fetching for Scanline 0
+		if ppu.CYC == 256 { // End of main evaluation period
+			if ppu.isRenderingEnabled() {
+				ppu.evaluateSprites() // Evaluate sprites for scanline 0
+			}
 		}
-
-		// Sprite fetches for scanline 0 happen during cycles 321-340 of the pre-render line.
-		// Simplified: Fetch all at cycle 321. Requires evaluation to be done before this.
-		// Sprite evaluation for scanline 0 happens during cycles 1-256 of pre-render line.
-		// Simplified: Evaluate at cycle 256.
-		if ppu.CYC == 256 {
-			ppu.evaluateSprites() // Evaluate sprites for scanline 0
+		if ppu.CYC == 257 { // Start of fetch period
+			if ppu.isRenderingEnabled() {
+				ppu.fetchSprites() // Fetch patterns for scanline 0 based on above evaluation
+			}
 		}
-		if ppu.CYC == 321 {
-			ppu.fetchSprites() // Fetch patterns for scanline 0 based on above evaluation
-		}
+        // Cycle 257 also copies horizontal address bits if rendering is enabled
+        if ppu.isRenderingEnabled() && ppu.CYC == 257 {
+            ppu.transferAddressX()
+        }
 
 	// --- Scanlines 0-239: Visible Scanlines ---
 	} else if ppu.SCANLINE >= 0 && ppu.SCANLINE <= 239 {
 
 		// Cycles 1-256: Render pixel if rendering enabled.
 		if ppu.isRenderingEnabled() && ppu.CYC >= 1 && ppu.CYC <= 256 {
-			ppu.renderPixel()
+			ppu.renderPixel() // Writes to SCREEN_DATA framebuffer
 		}
 
 		// Background Fetches & Shifting (Cycles 1-256, 321-336)
@@ -1073,23 +1076,22 @@ func Process(ppu *PPU) {
 			ppu.transferAddressX()
 		}
 
-		// Sprite Evaluation (for NEXT scanline, SL+1) happens during cycles 1-256.
-		// Simplified: perform evaluation at cycle 256.
-		if ppu.CYC == 256 {
-			ppu.evaluateSprites() // Evaluate for scanline SL+1
+		// Cycles 257-320: Sprite Evaluation & Fetching for NEXT scanline (SL+1)
+		if ppu.CYC == 256 { // End of main evaluation period
+			if ppu.isRenderingEnabled() {
+				ppu.evaluateSprites() // Evaluate sprites for scanline SL+1
+			}
 		}
-
-		// Sprite Tile Fetches (for CURRENT scanline, SL) happen during cycles 257-320.
-		// Simplified: perform all fetches at cycle 257.
-		// Fetches patterns based on secondary OAM populated during *previous* scanline's evaluation.
-		if ppu.CYC == 257 {
-			ppu.fetchSprites()
+		if ppu.CYC == 257 { // Start of fetch period
+			if ppu.isRenderingEnabled() {
+				ppu.fetchSprites() // Fetch patterns for scanline SL based on eval from SL-1
+			}
 		}
 
 	// --- Scanline 240: Post-render Scanline ---
 	} else if ppu.SCANLINE == 240 {
-		// PPU is idle. Frame data is complete. No rendering, no VRAM access.
-		// Do nothing specific here for now.
+		// PPU is idle. Frame data in SCREEN_DATA is complete.
+		// No rendering, no VRAM access related to rendering pipeline.
 
 	// --- Scanlines 241-260: Vertical Blanking Interval ---
 	} else if ppu.SCANLINE >= 241 && ppu.SCANLINE <= 260 {
@@ -1099,9 +1101,11 @@ func Process(ppu *PPU) {
 			if ppu.IO.PPUCTRL.GEN_NMI {
 				ppu.IO.TriggerNMI() // Signal NMI if enabled
 			}
+			// ---- FRAME BUFFER UPDATE TO TEXTURE ----
 			// Update screen & Check Keyboard once per frame AFTER VBlank starts
+			// This is where the completed SCREEN_DATA buffer is copied to the SDL texture.
 			ppu.ShowScreen()
-			ppu.CheckKeyboard() // <--- UPDATED CALL HERE
+			ppu.CheckKeyboard() // Check for events like Quit or Escape
 		}
 	} // End of scanline type checks
 
@@ -1143,64 +1147,71 @@ func (ppu *PPU) handleBackgroundFetchingAndShifting() {
 	if isFetchRange {
 		fetchCycleMod8 := ppu.CYC % 8
 		switch fetchCycleMod8 {
-		case 1: // Cycle 1, 9, 17, ..., 257, 321, 329
+		case 1: // Cycle 1, 9, 17, ..., 249, 257(no fetch), 321, 329, 337(no fetch)
 			// Begin fetch cycle: Load shifters with next tile data (fetched previously)
 			ppu.loadBackgroundShifters()
-			// Fetch Nametable byte for the *next* tile
+			// Fetch Nametable byte for the *next* tile (address based on v)
 			ppu.fetchNTByte()
-		case 3: // Cycle 3, 11, ..., 323, 331
+		case 3: // Cycle 3, 11, ..., 251, 323, 331
 			ppu.fetchATByte() // Fetch Attribute Table byte for the next tile
-		case 5: // Cycle 5, 13, ..., 325, 333
+		case 5: // Cycle 5, 13, ..., 253, 325, 333
 			ppu.fetchTileDataLow() // Fetch low plane of pattern data for the next tile
-		case 7: // Cycle 7, 15, ..., 327, 335
+		case 7: // Cycle 7, 15, ..., 255, 327, 335
 			ppu.fetchTileDataHigh() // Fetch high plane of pattern data
 		case 0: // Cycle 8, 16, ..., 256, 328, 336 -> End of 8-cycle pattern
 			// Increment horizontal scroll position in 'v' *after* the last fetch of the group
-			ppu.incrementScrollX()
-			// Loading of shifters is done at the *start* of the next cycle (case 1)
+			// This happens ONLY if the cycle is within the active fetch ranges
+			if ppu.CYC <= 256 || (ppu.CYC >= 328 && ppu.CYC <= 336) {
+				ppu.incrementScrollX()
+			}
+			// Loading of shifters with the fetched data happens at the *start* of the next cycle (case 1)
 		}
 	}
 }
 
-// initCanvas initializes SDL window, renderer, and texture.
+// initCanvas initializes SDL window, renderer, and texture for fullscreen display.
 func (ppu *PPU) initCanvas() error {
-	var winTitle string = "Alphanes (PPU Rewrite)"
+	var winTitle string = "Alphanes (Fullscreen PPU Rewrite)"
 	var err error
 
 	if err = sdl.Init(sdl.INIT_VIDEO); err != nil {
 		return fmt.Errorf("failed to initialize SDL Video: %w", err)
 	}
 
-	// Create window with initial size (e.g., 2x)
-	windowWidth := int32(SCREEN_WIDTH * 2)
-	windowHeight := int32(SCREEN_HEIGHT * 2)
+	// Create window in Fullscreen Desktop mode
+	// Width and height are ignored for FULLSCREEN_DESKTOP, it uses the monitor's current resolution.
 	ppu.window, err = sdl.CreateWindow(winTitle, sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
-		windowWidth, windowHeight, sdl.WINDOW_SHOWN|sdl.WINDOW_RESIZABLE)
+		0, 0, // Ignored for fullscreen desktop
+		sdl.WINDOW_SHOWN|sdl.WINDOW_FULLSCREEN_DESKTOP) // Use fullscreen desktop flag
 	if err != nil {
 		sdl.Quit()
-		return fmt.Errorf("failed to create window: %w", err)
+		return fmt.Errorf("failed to create fullscreen window: %w", err)
 	}
+	log.Println("Fullscreen window created.")
 
-	// Create renderer with VSync
+	// Create renderer with VSync enabled
 	ppu.renderer, err = sdl.CreateRenderer(ppu.window, -1, sdl.RENDERER_ACCELERATED|sdl.RENDERER_PRESENTVSYNC)
 	if err != nil {
 		ppu.window.Destroy()
 		sdl.Quit()
 		return fmt.Errorf("failed to create renderer: %w", err)
 	}
+	log.Println("Renderer created.")
 
-	// Set logical size for aspect ratio correct scaling
+	// Set logical size to maintain NES aspect ratio within the fullscreen window
 	if err = ppu.renderer.SetLogicalSize(SCREEN_WIDTH, SCREEN_HEIGHT); err != nil {
-		log.Printf("Warning: Failed to set logical size: %v", err)
-		// Continue, but scaling might not be ideal
+		log.Printf("Warning: Failed to set logical size: %v. Scaling might be incorrect.", err)
+		// Continue, but aspect ratio might be wrong
+	} else {
+		log.Printf("Logical size set to %dx%d.", SCREEN_WIDTH, SCREEN_HEIGHT)
 	}
 
 	// Use nearest neighbor scaling for pixel art look
 	if !sdl.SetHint(sdl.HINT_RENDER_SCALE_QUALITY, "0") {
-		log.Printf("Warning: Failed to set render scale quality hint.")
+		log.Printf("Warning: Failed to set render scale quality hint to nearest neighbor.")
 	}
 
-	// Create texture for PPU output (streaming for efficient updates)
+	// Create texture for PPU output (streaming for efficient updates from framebuffer)
 	ppu.texture, err = ppu.renderer.CreateTexture(sdl.PIXELFORMAT_ARGB8888, sdl.TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT)
 	if err != nil {
 		ppu.renderer.Destroy()
@@ -1208,52 +1219,58 @@ func (ppu *PPU) initCanvas() error {
 		sdl.Quit()
 		return fmt.Errorf("failed to create texture: %w", err)
 	}
+	log.Println("Streaming texture created.")
 
-	log.Println("SDL Canvas Initialized Successfully")
+	log.Println("SDL Canvas Initialized Successfully (Fullscreen)")
 	return nil
 }
 
-// ShowScreen updates the SDL texture with the PPU's screen data and presents it.
+// ShowScreen updates the SDL texture with the PPU's framebuffer data (SCREEN_DATA) and presents it.
+// This should be called once per frame, typically at the start of VBlank.
 func (ppu *PPU) ShowScreen() {
 	if ppu.renderer == nil || ppu.texture == nil || ppu.window == nil {
+		log.Println("Warning: ShowScreen called but SDL resources are nil.")
 		return // Avoid panic if SDL resources were cleaned up
 	}
 
-	// Safety check: ensure the buffer has elements before getting pointer
-	if len(ppu.SCREEN_DATA) == 0 {
-		log.Println("Warning: ShowScreen called with empty SCREEN_DATA buffer.")
+	// Ensure the framebuffer has data before proceeding
+	if len(ppu.SCREEN_DATA) != SCREEN_WIDTH*SCREEN_HEIGHT {
+		log.Printf("Warning: ShowScreen called with incomplete or incorrectly sized framebuffer (%d elements).", len(ppu.SCREEN_DATA))
 		return
 	}
 
-	// FIX: Use Update with correct parameters (pixels unsafe.Pointer, pitch)
-	pitch := int(SCREEN_WIDTH * 4) // Bytes per row for ARGB8888 format (Width * 4 bytes/pixel)
+	// Calculate pitch (bytes per row) for the texture format
+	pitch := int(SCREEN_WIDTH * 4) // ARGB8888 format = 4 bytes per pixel
 
-	// Convert the slice data pointer to unsafe.Pointer
-	// This gets the memory address of the underlying array's first element.
+	// Get a pointer to the framebuffer data (unsafe operation)
+	// This provides direct memory access needed by UpdateTexture
 	pixelsPtr := unsafe.Pointer(&ppu.SCREEN_DATA[0])
 
-	// Update the texture with the raw pixel data
-	err := ppu.texture.Update(nil, pixelsPtr, pitch) // Use the correct pointer type
+	// Update the SDL texture with the pixel data from the framebuffer
+	err := ppu.texture.Update(nil, pixelsPtr, pitch)
 	if err != nil {
-		// Log the error, but maybe don't return immediately? Depends on desired behavior.
-		// Returning might stop the emulator visually if updates consistently fail.
+		// Log the error, but don't necessarily stop the emulator.
 		log.Printf("Warning: Failed to update SDL texture: %v", err)
-		// return // Decide if you want to halt rendering on error
+		// Consider if continuing makes sense if texture updates fail.
 	}
 
-	// Clear the renderer (optional, good practice)
-	ppu.renderer.SetDrawColor(0, 0, 0, 255) // Black background
+	// Clear the renderer (optional, but good practice before drawing)
+	// Set background color for areas outside the logical size (if any)
+	if err = ppu.renderer.SetDrawColor(0, 0, 0, 255); err != nil { // Black bars
+		log.Printf("Warning: Failed to set draw color: %v", err)
+	}
 	if err = ppu.renderer.Clear(); err != nil {
 		log.Printf("Warning: Failed to clear SDL renderer: %v", err)
-		// Continue if clear fails? Maybe.
 	}
 
-	// Copy the updated texture to the renderer (scales automatically due to logical size)
+	// Copy the updated texture to the renderer.
+	// SDL handles scaling from the texture's size (256x240) to the logical size,
+	// and then scales the logical size to fit the fullscreen window.
 	if err = ppu.renderer.Copy(ppu.texture, nil, nil); err != nil {
 		log.Printf("Warning: Failed to copy SDL texture to renderer: %v", err)
-		return // Likely want to return here if copy fails
+		return // Critical if copy fails, likely nothing will display
 	}
 
-	// Present the renderer to the window
+	// Present the renderer's contents to the window
 	ppu.renderer.Present()
 }
