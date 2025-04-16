@@ -60,7 +60,7 @@ type Emulator struct {
 }
 
 var (
-	Cart     cartridge.Cartridge
+	Cart     *cartridge.Cartridge
 	Nescpu   cpu.CPU
 	Nesppu   *ppu.PPU
 	Nesio    ioports.IOPorts
@@ -79,7 +79,11 @@ func main() {
 	}
 
 	fmt.Println("Loading " + os.Args[1])
-	Cart = cartridge.LoadRom(os.Args[1])
+	var err error
+	Cart, err = cartridge.LoadRom(os.Args[1])
+	if err != nil {
+		log.Fatalf("Failed to load ROM: %v", err)
+	}
 
 	// Setup debug if needed
 	setupDebugMode()
@@ -113,20 +117,20 @@ func initializeEmulator() {
 	Nescpu = cpu.StartCPU()
 	
 	// Initialize IOPorts using the loaded Cartridge
-	Nesio = ioports.StartIOPorts(&Cart)
+	Nesio = ioports.StartIOPorts(Cart)
 	Nescpu.IO = Nesio
 	Nescpu.D = Debug
 	Nescpu.D.Verbose = true
 
 	// Set Reset Vector after loading the ROM and initializing the CPU
-	cpu.SetResetVector(&Nescpu, &Cart)
+	cpu.SetResetVector(&Nescpu, Cart)
 
 	fmt.Printf("PC after SetResetVector: %04X\nPRG[0x3FFC]: %02X\nPRG[0x3FFD]: %02X\n", 
 		Nescpu.PC, Cart.PRG[0x3FFC], Cart.PRG[0x3FFD])
 
 	// Initialize PPU
 	var errPPU error
-	Nesppu, errPPU = ppu.StartPPU(&Nescpu.IO, &Cart)
+	Nesppu, errPPU = ppu.StartPPU(&Nescpu.IO, Cart)
 	if errPPU != nil {
 		log.Fatalf("Failed to initialize PPU: %v", errPPU)
 	}
@@ -195,7 +199,7 @@ func emulate() {
 				// Process CPU and PPU cycles in a single optimized batch
 				for i := 0; i < batchSize; i++ {
 					// Execute one CPU cycle
-					cpu.Process(&Nescpu, &Cart)
+					cpu.Process(&Nescpu, Cart)
 					
 					// Execute PPU cycles (3 per CPU cycle)
 					for j := 0; j < ppuCyclesPerCpuCycle; j++ {

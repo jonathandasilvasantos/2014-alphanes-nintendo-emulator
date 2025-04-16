@@ -25,12 +25,8 @@ package ppu
 import (
 	"fmt"
 	"log" // Use log for errors/warnings
-	// "os" // Moved to ppu_display.go
-	// "unsafe" // Moved to ppu_display.go
 	"zerojnt/cartridge"
 	"zerojnt/ioports"
-	"zerojnt/mapper" // Import mapper
-
 	// "zerojnt/debug" // Keep commented if not actively used
 
 	"github.com/veandco/go-sdl2/sdl" // Still needed for PPU struct definition
@@ -51,16 +47,6 @@ const (
 	NAMETABLE_2     uint16 = 0x2800
 	NAMETABLE_3     uint16 = 0x2C00
 	PALETTE_RAM     uint16 = 0x3F00
-)
-
-// Mirroring Modes constants (matching cartridge/mapper package expectations)
-// These values should align with what cartridge.GetMirroringMode() returns
-const (
-	HORIZONTAL         = mapper.MMC1_MIRROR_HORIZONTAL // Usually 0 or 1 depending on mapper
-	VERTICAL           = mapper.MMC1_MIRROR_VERTICAL   // Usually 0 or 1
-	FOURSCREEN         = 0x04                          // Typically represented by a unique value
-	SINGLE_SCREEN_LOW  = mapper.MMC1_MIRROR_SINGLE_LOWER
-	SINGLE_SCREEN_HIGH = mapper.MMC1_MIRROR_SINGLE_UPPER
 )
 
 type PPU struct {
@@ -145,31 +131,31 @@ func (ppu *PPU) MirrorNametableAddress(addr uint16) (effectiveAddr uint16, isInt
 		return addr, false // Return original address, marked as not internal
 	}
 
-	relativeAddr := addr & 0x0FFF // Address relative to 0x2000 (0x0000 - 0x0FFF)
-	mirrorMode := ppu.Cart.GetMirroringMode()
+	relativeAddr := addr & 0x0FFF                                                    // Address relative to 0x2000 (0x0000 - 0x0FFF)
+	vMirror, hMirror, fourScreen, singleScreen, singleScreenBank := ppu.Cart.GetCurrentMirroringType() // Use the correct method
 
-	switch mirrorMode {
-	case VERTICAL: // Tables 0 and 1 ($2000, $2400 physical) mirror $2800, $2C00
-		effectiveAddr = relativeAddr & 0x07FF // Mask to 0x0000-0x07FF range
+	if fourScreen {
+		effectiveAddr = 0x2000 | relativeAddr // Use full 4KB range, based at $2000
+		isInternalVRAM = false                // Handled by mapper/cartridge RAM
+	} else if singleScreen {
+		if singleScreenBank == 0 { // Low bank
+			effectiveAddr = relativeAddr & 0x03FF // Always map to first 1KB (physical NT0)
+		} else { // High bank
+			effectiveAddr = 0x0400 | (relativeAddr & 0x03FF) // Always map to second 1KB (physical NT1)
+		}
 		isInternalVRAM = true
-	case HORIZONTAL: // Tables 0 and 2 ($2000, $2800 physical) mirror $2400, $2C00
+	} else if vMirror { // Vertical Mirroring
+		effectiveAddr = relativeAddr & 0x07FF // Mask to 0x0000-0x07FF range (physical NT0/NT1)
+		isInternalVRAM = true
+	} else if hMirror { // Horizontal Mirroring
 		if relativeAddr < 0x0800 { // Top half (NT0 or NT1 -> maps to physical NT0)
 			effectiveAddr = relativeAddr & 0x03FF // Mask to 0x0000-0x03FF range
 		} else { // Bottom half (NT2 or NT3 -> maps to physical NT1)
 			effectiveAddr = 0x0400 | (relativeAddr & 0x03FF) // Mask to 0x0400-0x07FF range
 		}
 		isInternalVRAM = true
-	case FOURSCREEN:
-		effectiveAddr = relativeAddr // Use full 4KB range
-		isInternalVRAM = false       // Handled by mapper/cartridge RAM (mapping logic assumes this RAM is accessible via CHR mapping)
-	case SINGLE_SCREEN_LOW:
-		effectiveAddr = relativeAddr & 0x03FF // Always map to first 1KB (physical NT0)
-		isInternalVRAM = true
-	case SINGLE_SCREEN_HIGH:
-		effectiveAddr = 0x0400 | (relativeAddr & 0x03FF) // Always map to second 1KB (physical NT1)
-		isInternalVRAM = true
-	default:
-		log.Printf("Warning: Unknown mirroring mode %d, defaulting to HORIZONTAL", mirrorMode)
+	} else {
+		log.Printf("Warning: Unknown mirroring state (v:%v h:%v 4s:%v ss:%v bank:%d), defaulting to HORIZONTAL", vMirror, hMirror, fourScreen, singleScreen, singleScreenBank)
 		// Default to HORIZONTAL mirroring logic
 		if relativeAddr < 0x0800 {
 			effectiveAddr = relativeAddr & 0x03FF
@@ -182,14 +168,8 @@ func (ppu *PPU) MirrorNametableAddress(addr uint16) (effectiveAddr uint16, isInt
 	// Add the $2000 base back only if mapping to internal VRAM for indexing VRAM array
 	if isInternalVRAM {
 		effectiveAddr += 0x2000
-	} else {
-		// For external VRAM (like FourScreen), the effectiveAddr returned here
-		// (0x0000-0x0FFF) might need further mapping by the caller using the mapper
-		// or be used directly if mapper handles it transparently via MapPPU.
-		// If using Cart.CHR for FourScreen, this relative address needs the 0x2000 base
-		// added back before calling MapPPU. Let's return the $2000+ addr for consistency.
-		effectiveAddr = 0x2000 | effectiveAddr
 	}
+	// For external VRAM (like FourScreen), effectiveAddr already includes the $2000 base.
 
 	return effectiveAddr, isInternalVRAM
 }
@@ -203,17 +183,19 @@ func (ppu *PPU) ReadPPUMemory(addr uint16) byte {
 		physicalCHRAddr := ppu.Cart.Mapper.MapPPU(addr)
 		chrData := ppu.Cart.CHR // Access the potentially modified CHR RAM or ROM copy
 
-		if physicalCHRAddr < uint16(len(chrData)) {
+		// Ensure physicalCHRAddr is valid before accessing chrData
+		if physicalCHRAddr == 0xFFFF { // 0xFFFF indicates unmapped/invalid
+			log.Printf("Warning: PPU Read CHR mapped to invalid address %04X from PPU address %04X", physicalCHRAddr, addr)
+			return 0 // Return 0 for invalid mapping
+		}
+
+		if int(physicalCHRAddr) < len(chrData) {
 			return chrData[physicalCHRAddr]
 		}
-		// Check CHR size as reported by cartridge struct if buffer seems wrong size
-		if physicalCHRAddr < uint16(ppu.Cart.GetCHRSize()) {
-			log.Printf("Warning: PPU Read CHR mapped address %04X potentially out of CHR buffer bounds (%d) but within GetCHRSize (%d)",
-				physicalCHRAddr, len(chrData), ppu.Cart.GetCHRSize())
-			return 0 // Return 0 to prevent crash on out-of-bounds read
-		}
-		log.Printf("Warning: PPU Read CHR mapped address %04X out of CHR bounds (%d)", physicalCHRAddr, len(chrData))
-		return 0
+
+		log.Printf("Warning: PPU Read CHR mapped address %04X out of CHR buffer bounds (%d) for PPU address %04X",
+			physicalCHRAddr, len(chrData), addr)
+		return 0 // Return 0 to prevent crash on out-of-bounds read
 
 	case addr >= 0x2000 && addr < 0x3F00: // Nametables
 		mappedAddr, isInternal := ppu.MirrorNametableAddress(addr)
@@ -229,8 +211,12 @@ func (ppu *PPU) ReadPPUMemory(addr uint16) byte {
 			// Four-screen or other mapper-handled VRAM
 			// Let the mapper handle the read via MapPPU
 			physicalAddr := ppu.Cart.Mapper.MapPPU(mappedAddr) // Use the mirrored address for MapPPU
-			chrData := ppu.Cart.CHR                           // Assume mapped to CHR space
-			if physicalAddr < uint16(len(chrData)) {
+			if physicalAddr == 0xFFFF {                        // Check if mapper returned invalid
+				log.Printf("Warning: PPU Read mapper-handled VRAM %04X mapped to invalid address %04X", mappedAddr, physicalAddr)
+				return 0
+			}
+			chrData := ppu.Cart.CHR // Assume mapped to CHR space
+			if int(physicalAddr) < len(chrData) {
 				return chrData[physicalAddr]
 			}
 			log.Printf("Warning: PPU Read attempted for mapper-handled VRAM at %04X (mapped to %04X) - Out of CHR bounds?", addr, physicalAddr)
@@ -263,20 +249,22 @@ func (ppu *PPU) WritePPUMemory(addr uint16, data byte) {
 	switch {
 	case addr < 0x2000: // Pattern Tables (CHR RAM via Cartridge/Mapper)
 		// Only allow writes if the cartridge uses CHR RAM
-		if ppu.Cart.GetCHRSize() == 0 {
+		if ppu.Cart.GetCHRSize() == 0 { // CHR Size 0 implies RAM
 			physicalCHRAddr := ppu.Cart.Mapper.MapPPU(addr)
+			if physicalCHRAddr == 0xFFFF {
+				log.Printf("Warning: PPU Write CHR RAM mapped to invalid address %04X from PPU address %04X", physicalCHRAddr, addr)
+				return
+			}
 			chrRAM := ppu.Cart.CHR // Access the CHR slice, which should be RAM
-			if physicalCHRAddr < uint16(len(chrRAM)) {
+			if int(physicalCHRAddr) < len(chrRAM) {
 				chrRAM[physicalCHRAddr] = data
 			} else {
 				log.Printf("Warning: PPU Write CHR RAM mapped address %04X out of CHR RAM bounds (%d)", physicalCHRAddr, len(chrRAM))
 			}
 		} else {
 			// Attempting to write to CHR ROM, usually ignored or handled by mapper
-			// Some mappers might use writes here for control registers.
-			// For now, just log it. A specific mapper might override this.
-			// log.Printf("Debug: Write attempt to CHR ROM area %04X (Value: %02X) - Ignored by default", addr, data)
-			ppu.Cart.Mapper.Write(addr, data) // Let mapper decide if it needs this write
+			// Let the mapper decide if it needs this write.
+			ppu.Cart.Mapper.Write(addr, data)
 		}
 
 	case addr >= 0x2000 && addr < 0x3F00: // Nametables
@@ -562,9 +550,7 @@ func (ppu *PPU) transferAddressX() {
 		return
 	}
 	// Copy coarse X (bits 0-4) and horizontal nametable select (bit 10)
-	// Mask for bits to keep in v: 111 01 11111 00000 = 0x7BE0 (Keep Y bits) -> Error in original comment, should be 111 11 11111 00000 = FBE0? No, keep Y and FineY -> 111 01 11111 00000 = 0x7BE0 is correct.
-	// Mask for bits to copy from t: 000 10 00000 11111 = 0x041F (Copy X bits) -> Correct.
-	ppu.v = (ppu.v & 0xFBE0) | (ppu.t & 0x041F) // Corrected mask usage based on NesDev wiki: V:[..H ..L. .M..] = T:[..H ..L. .M..] and V:[... ... ... .X.. XXXX] = T:[... ... ... .X.. XXXX] -> v[10] = t[10] and v[4..0]=t[4..0]
+	ppu.v = (ppu.v & 0xFBE0) | (ppu.t & 0x041F) // Keep V's Y bits, copy T's X bits
 }
 
 // transferAddressY copies vertical bits from t to v.
@@ -574,9 +560,7 @@ func (ppu *PPU) transferAddressY() {
 		return
 	}
 	// Copy fine Y (bits 12-14), coarse Y (bits 5-9), and vertical nametable select (bit 11)
-	// Mask for bits to keep in v: 000 10 00000 11111 = 0x041F (Keep X bits) -> Correct.
-	// Mask for bits to copy from t: 111 01 11111 00000 = 0x7BE0 (Copy Y bits) -> Correct.
-	ppu.v = (ppu.v & 0x841F) | (ppu.t & 0x7BE0) // Corrected mask usage based on NesDev wiki: copy fineY, coarseY, NT select Y.
+	ppu.v = (ppu.v & 0x841F) | (ppu.t & 0x7BE0) // Keep V's X bits, copy T's Y bits
 }
 
 // loadBackgroundShifters loads fetched tile data into background shift registers.
@@ -633,14 +617,18 @@ func (ppu *PPU) updateShifters() {
 
 // fetchNTByte fetches the Nametable byte based on the current VRAM address 'v'.
 func (ppu *PPU) fetchNTByte() {
-	if !ppu.isRenderingEnabled() { return }
+	if !ppu.isRenderingEnabled() {
+		return
+	}
 	addr := 0x2000 | (ppu.v & 0x0FFF) // Nametable base + 12 lower bits of v
 	ppu.nt_byte = ppu.ReadPPUMemory(addr)
 }
 
 // fetchATByte fetches the Attribute Table byte based on 'v'.
 func (ppu *PPU) fetchATByte() {
-	if !ppu.isRenderingEnabled() { return }
+	if !ppu.isRenderingEnabled() {
+		return
+	}
 	// Address: 0x23C0 | Nametable select | Coarse Y / 4 | Coarse X / 4
 	addr := 0x23C0 | (ppu.v & 0x0C00) | ((ppu.v >> 4) & 0x38) | ((ppu.v >> 2) & 0x07)
 	ppu.at_byte = ppu.ReadPPUMemory(addr)
@@ -648,7 +636,9 @@ func (ppu *PPU) fetchATByte() {
 
 // fetchTileDataLow fetches the low byte of the background tile pattern based on 'v' and PPUCTRL.
 func (ppu *PPU) fetchTileDataLow() {
-	if !ppu.isRenderingEnabled() { return }
+	if !ppu.isRenderingEnabled() {
+		return
+	}
 	fineY := (ppu.v >> 12) & 7                  // Fine Y scroll from v (bits 12-14)
 	patternTable := ppu.IO.PPUCTRL.BACKGROUND_ADDR // BG Pattern Table base ($0000 or $1000)
 	tileIndex := uint16(ppu.nt_byte)            // Tile index from Nametable byte
@@ -659,7 +649,9 @@ func (ppu *PPU) fetchTileDataLow() {
 
 // fetchTileDataHigh fetches the high byte of the background tile pattern.
 func (ppu *PPU) fetchTileDataHigh() {
-	if !ppu.isRenderingEnabled() { return }
+	if !ppu.isRenderingEnabled() {
+		return
+	}
 	fineY := (ppu.v >> 12) & 7
 	patternTable := ppu.IO.PPUCTRL.BACKGROUND_ADDR
 	tileIndex := uint16(ppu.nt_byte)
@@ -693,11 +685,12 @@ func (ppu *PPU) evaluateSprites() {
 	numSpritesFound := 0
 
 	for n := 0; n < 64; n++ {
-		spriteY := int(primaryOAM[oamIdx]) + 1 // Sprite Y coord (top edge is Y+1 on screen)
-		scanlineToCheck := ppu.SCANLINE        // We evaluate for the *next* scanline, which is currently being rendered (SCANLINE)
+		spriteY := int(primaryOAM[oamIdx]) // OAM Y is top edge coordinate (0-239)
+		scanlineToCheck := ppu.SCANLINE    // We evaluate for the *next* scanline, which is currently being rendered (SCANLINE)
 
 		// Check if the sprite is vertically in range for the next scanline.
-		if scanlineToCheck >= 0 && spriteY <= scanlineToCheck && scanlineToCheck < (spriteY+spriteHeight) { // Added scanlineToCheck >= 0
+		// Sprite is visible if scanline >= spriteY and scanline < spriteY + height
+		if scanlineToCheck >= 0 && scanlineToCheck >= spriteY && scanlineToCheck < (spriteY+spriteHeight) {
 			// Sprite is vertically in range. Add to secondary OAM if space.
 			if numSpritesFound < 8 {
 				targetIdx := numSpritesFound * 4
@@ -751,7 +744,7 @@ func (ppu *PPU) fetchSprites() {
 	// Fetch data for sprites placed in secondaryOAM (up to spriteCount found previously)
 	for i := 0; i < ppu.spriteCount; i++ {
 		// Data from secondary OAM for the sprite being loaded
-		spriteY := uint16(ppu.secondaryOAM[i*4+0]) //+ 1 // Add 1 because OAM Y=0 is scanline 1 -> Removed +1, comparison in evaluateSprites handles this
+		spriteY := uint16(ppu.secondaryOAM[i*4+0]) // OAM Y coordinate
 		tileIndex := ppu.secondaryOAM[i*4+1]
 		attributes := ppu.secondaryOAM[i*4+2]
 		spriteX := ppu.secondaryOAM[i*4+3]
@@ -759,8 +752,12 @@ func (ppu *PPU) fetchSprites() {
 		// Load sprite state for the rendering pipeline
 		ppu.spriteCountersX[i] = spriteX    // X position counter for shifting
 		ppu.spriteLatches[i] = attributes // Attribute latch (palette, priority, flip)
-		// Determine if this slot holds sprite 0 based on whether sprite 0 hit was possible *and* this is the first sprite found
-		ppu.spriteIsSprite0[i] = ppu.spriteZeroHitPossible && (i == 0) // Flag set during eval of previous line // Bug? should be based on which sprite index is 0, not slot index. Reverted original logic which seems correct in context.
+		// Determine if this slot holds sprite 0: Use spriteZeroHitPossible flag (set if sprite 0 was found during eval) AND check if this is the first sprite (i=0)
+		// The sprite in secondary OAM slot 0 is not necessarily sprite 0 from primary OAM.
+		// We need a way to track which sprite entry (0-63) ended up in which secondary slot, or rely on the spriteZeroHitPossible flag.
+		// Assuming spriteZeroHitPossible correctly reflects if OAM[0] was found during evaluation, and the *first* matching sprite goes into slot 0.
+		// This logic seems suspect. Let's simplify: spriteZeroHitPossible is the source of truth for sprite 0 presence.
+		ppu.spriteIsSprite0[i] = ppu.spriteZeroHitPossible && (i == 0) // Flag indicates if Sprite 0 is *present*. This slot check is problematic. Let's track it during render.
 
 		// Determine pattern row based on vertical flip and current scanline
 		flipHoriz := (attributes & 0x40) != 0
@@ -768,7 +765,7 @@ func (ppu *PPU) fetchSprites() {
 
 		scanlineToRender := uint16(ppu.SCANLINE) // Current scanline being rendered
 		// Calculate row relative to sprite's top edge (spriteY is the screen Y coord where sprite top appears)
-		row := scanlineToRender - uint16(spriteY)
+		row := scanlineToRender - spriteY
 
 		if flipVert {
 			row = uint16(spriteHeight-1) - row // Adjust row for vertical flip
@@ -862,7 +859,7 @@ func (ppu *PPU) renderPixel() {
 	sprPalette := byte(0) // 2-bit palette index (0-3)
 	sprPriority := byte(1) // 0 = In front of background, 1 = Behind background
 	sprIsOpaque := false
-	isSpriteZeroPixel := false // Track if the chosen sprite pixel is from sprite 0
+	spriteZeroPixelRendered := false // Track if an *opaque* pixel from sprite 0 is being rendered *at this specific cycle*
 
 	if ppu.IO.PPUMASK.SHOW_SPRITE {
 		// Check horizontal clipping mask (leftmost 8 pixels)
@@ -884,10 +881,11 @@ func (ppu *PPU) renderPixel() {
 						sprPriority = (ppu.spriteLatches[i] & 0x20) >> 5 // Bit 5 = priority (0=FG, 1=BG)
 						sprIsOpaque = true
 
-						// Check if this pixel belongs to sprite 0 for hit detection
-						// Use the spriteIsSprite0 flag determined during fetchSprites
-						if ppu.spriteIsSprite0[i] {
-							isSpriteZeroPixel = true
+						// Check if this opaque pixel belongs to sprite 0
+						// Sprite 0 is identified by the spriteZeroHitPossible flag during evaluation.
+						// If spriteZeroHitPossible is true, the sprite loaded into slot 0 *is* sprite 0.
+						if ppu.spriteZeroHitPossible && i == 0 {
+							spriteZeroPixelRendered = true // An opaque pixel from sprite 0 is rendering now
 						}
 
 						// Found the highest priority sprite for this X, stop searching (hardware behavior)
@@ -914,9 +912,8 @@ func (ppu *PPU) renderPixel() {
 		finalPalette = bgPalette
 	} else { // Both BG and Sprite are opaque
 		// --- Sprite 0 Hit Detection ---
-		// Must happen *before* priority resolution if both are opaque.
-		// Check if sprite 0 is involved, BG is opaque, pixelX is valid (0-254), and rendering is enabled.
-		if isSpriteZeroPixel && bgIsOpaque && pixelX >= 0 && pixelX < 255 && ppu.isRenderingEnabled() {
+		// Occurs if an opaque BG pixel and an opaque Sprite 0 pixel are rendered on the same cycle (pixelX 0-254).
+		if spriteZeroPixelRendered && bgIsOpaque && pixelX >= 0 && pixelX < 255 {
 			// Also check clipping windows. Hit cannot occur in leftmost 8 pixels if either BG or SP rendering is disabled there.
 			showBG := !(pixelX < 8 && !ppu.IO.PPUMASK.SHOW_LEFTMOST_8_BACKGROUND)
 			showSP := !(pixelX < 8 && !ppu.IO.PPUMASK.SHOW_LEFTMOST_8_SPRITE)
@@ -986,7 +983,7 @@ func Process(ppu *PPU) {
 			ppu.IO.PPUSTATUS.VBLANK = false
 			ppu.IO.PPUSTATUS.SPRITE_0_BIT = false
 			ppu.IO.PPUSTATUS.SPRITE_OVERFLOW = false
-			// ppu.IO.ClearNMI() // NMI line stays high until VBLANK is cleared by reading $2002 or next pre-render
+			ppu.IO.NMI = false // Explicitly clear NMI flag here (if it wasn't already cleared by CPU reading $2002)
 		}
 
 		// Handle background fetches/shifts for the *upcoming* scanline 0.
@@ -998,24 +995,15 @@ func Process(ppu *PPU) {
 		}
 
 		// Cycles 257-320: Sprite Evaluation & Fetching for Scanline 0
-		if ppu.CYC >= 1 && ppu.CYC <= 256 { // Evaluate sprites during cycles 1-256
-			if ppu.isRenderingEnabled() {
-				// Simplified: Evaluate everything at once at cycle 256.
-				// Real HW evaluates byte-by-byte.
-				if ppu.CYC == 256 {
-					ppu.evaluateSprites() // Evaluate sprites for scanline 0
-				}
-			}
+		// Sprite Evaluation (Simplified: Happens conceptually during cycles 1-256, result ready by 257)
+		if ppu.CYC == 256 && ppu.isRenderingEnabled() {
+			ppu.evaluateSprites() // Evaluate sprites for scanline 0
 		}
-		if ppu.CYC >= 257 && ppu.CYC <= 320 { // Fetch sprites during cycles 257-320
-			if ppu.isRenderingEnabled() {
-				// Simplified: Fetch everything at once at cycle 257.
-				// Real HW fetches byte-by-byte.
-				if ppu.CYC == 257 {
-					ppu.fetchSprites() // Fetch patterns for scanline 0 based on above evaluation
-				}
-			}
+		// Sprite Fetching (Simplified: Happens conceptually during cycles 257-320, patterns loaded into shifters)
+		if ppu.CYC == 257 && ppu.isRenderingEnabled() {
+			ppu.fetchSprites() // Fetch patterns for scanline 0 based on above evaluation
 		}
+
 		// Cycle 257 also copies horizontal address bits if rendering is enabled
 		if ppu.isRenderingEnabled() && ppu.CYC == 257 {
 			ppu.transferAddressX()
@@ -1043,21 +1031,13 @@ func Process(ppu *PPU) {
 		}
 
 		// Cycles 257-320: Sprite Evaluation & Fetching for NEXT scanline (SL+1)
-		if ppu.CYC >= 1 && ppu.CYC <= 256 { // Evaluate sprites during cycles 1-256
-			if ppu.isRenderingEnabled() {
-				// Simplified: Evaluate everything at once at cycle 256.
-				if ppu.CYC == 256 {
-					ppu.evaluateSprites() // Evaluate sprites for scanline SL+1
-				}
-			}
+		// Sprite Evaluation (Simplified: Happens conceptually during cycles 1-256)
+		if ppu.CYC == 256 && ppu.isRenderingEnabled() {
+			ppu.evaluateSprites() // Evaluate sprites for scanline SL+1
 		}
-		if ppu.CYC >= 257 && ppu.CYC <= 320 { // Fetch sprites during cycles 257-320
-			if ppu.isRenderingEnabled() {
-				// Simplified: Fetch everything at once at cycle 257.
-				if ppu.CYC == 257 {
-					ppu.fetchSprites() // Fetch patterns for scanline SL based on eval from SL-1
-				}
-			}
+		// Sprite Fetching (Simplified: Happens conceptually during cycles 257-320)
+		if ppu.CYC == 257 && ppu.isRenderingEnabled() {
+			ppu.fetchSprites() // Fetch patterns for scanline SL based on eval from SL-1
 		}
 
 	// --- Scanline 240: Post-render Scanline ---
@@ -1119,8 +1099,8 @@ func (ppu *PPU) handleBackgroundFetchingAndShifting() {
 	if isFetchRange {
 		fetchCycleMod8 := ppu.CYC % 8
 		switch fetchCycleMod8 {
-		case 1: // Cycle 1, 9, 17, ..., 249, 257(no fetch?), 321, 329, 337(no fetch?) -> Fetch should happen on 257/337, load happens on next cycle (2 or 322)
-			// Begin fetch cycle: Load shifters with next tile data (fetched previously)
+		case 1: // Cycle 1, 9, 17, ..., 249, 321, 329 -> Start of fetch cycle
+			// Load shifters with next tile data (fetched on previous cycle 7)
 			ppu.loadBackgroundShifters()
 			// Fetch Nametable byte for the *next* tile (address based on v)
 			ppu.fetchNTByte()
@@ -1133,10 +1113,11 @@ func (ppu *PPU) handleBackgroundFetchingAndShifting() {
 		case 0: // Cycle 8, 16, ..., 256, 328, 336 -> End of 8-cycle pattern
 			// Increment horizontal scroll position in 'v' *after* the last fetch of the group
 			// This happens ONLY if the cycle is within the active fetch ranges
+			// Increment happens on cycles 8, 16, ... 256, 328, 336
 			if ppu.CYC <= 256 || (ppu.CYC >= 328 && ppu.CYC <= 336) {
 				ppu.incrementScrollX()
 			}
-			// Loading of shifters with the fetched data happens at the *start* of the next cycle (case 1)
+			// Loading of shifters with the data fetched on cycle 7 happens at the *start* of the next cycle (case 1)
 		}
 	}
 }
