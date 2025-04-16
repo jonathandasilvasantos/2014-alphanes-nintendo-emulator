@@ -1,70 +1,74 @@
-// File: apu/mixer.go (Simplified Version)
+// File: apu/mixer.go
 package apu
 
 // Mixer handles combining the audio channel outputs.
-// This is a simplified version focusing on basic scaling and summing.
 type Mixer struct {
 	// Scaling factors to balance the relative volume of each channel.
-	// These values can be tuned to achieve a desired mix.
 	pulseScale    float32
 	triangleScale float32
 	noiseScale    float32
-	// dmcScale      float32 // Placeholder for Delta Modulation Channel
+	// dmcScale      float32 // Reserved for future Delta Modulation Channel
+	
+	// Hard limit to prevent audio clipping
+	useHardLimit  bool
+	hardLimit     float32
+	
+	// DC blocking filter to remove constant offset (improve audio quality)
+	dcBlockingAlpha float32
+	dcOffset        float32
 }
 
-// NewMixer creates and initializes a new simplified Mixer.
+// NewMixer creates and initializes a mixer with balanced scaling factors.
 func NewMixer() *Mixer {
 	return &Mixer{
-		// Initial scaling factors. These are common starting points,
-		// aiming for a reasonable balance between channel loudness.
-		// Derived from typical values seen in NES emulators.
-		pulseScale:    0.00752 * 2, // Combine factor for two pulse channels
-		triangleScale: 0.00851,
-		noiseScale:    0.00494,
-		// dmcScale:      0.00335,
+		// Properly balanced channel volumes without the *2 multiplier on pulse
+		// These values were tuned for a better audio mix
+		pulseScale:      0.15,     // Was 0.00752 * 2, now properly scaled
+		triangleScale:   0.20,     // Was 0.00851, increased for better balance
+		noiseScale:      0.10,     // Was 0.00494, adjusted for better balance
+		// dmcScale:     0.12,     // Reserved for future DMC implementation
+		
+		// Enable hard limiting to prevent distortion
+		useHardLimit:    true,
+		hardLimit:       0.95,     // Allow some headroom before full scale
+		
+		// DC blocking filter to remove unwanted low frequency noise
+		dcBlockingAlpha: 0.995,    // Filter coefficient (near 1.0 for slight effect)
+		dcOffset:        0.0,      // Running average of signal, initialized at 0
 	}
-	// Note: The exact scaling might need further tuning based on how
-	// channel outputs are normalized (e.g., are they 0-15 or 0.0-1.0?).
-	// Assuming channel Output() methods return roughly 0.0 to 1.0.
-	// Let's adjust based on the previous advanced mixer's tuned scale factors for a better start:
-	/*
-	   return &Mixer{
-	       pulseScale:    0.28, // Factor per pulse channel
-	       triangleScale: 0.27,
-	       noiseScale:    0.13,
-	       // dmcScale: 0.10, // Example
-	   }
-	*/
 }
 
 // MixChannels combines the outputs of the individual APU channels.
-// pulse1, pulse2, triangle, noise should be the output sample from each channel (typically -1.0 to 1.0 or 0.0 to 1.0).
-// dmc is a placeholder for the Delta Modulation Channel output.
+// Each channel parameter should provide a normalized output in the range 0.0 to 1.0.
 func (m *Mixer) MixChannels(pulse1, pulse2, triangle, noise, dmc float32) float32 {
-
-	// --- Simple Linear Mix ---
-	// Apply individual scaling factors
+	// Apply individual scaling factors to each channel
 	scaledPulse1 := pulse1 * m.pulseScale
 	scaledPulse2 := pulse2 * m.pulseScale
 	scaledTriangle := triangle * m.triangleScale
 	scaledNoise := noise * m.noiseScale
-	// scaledDMC := dmc * m.dmcScale // When DMC is implemented
+	// scaledDMC := dmc * m.dmcScale // Reserved for future DMC implementation
 
-	// Sum the scaled channel outputs
-	// Using separate pulse scaling allows adjusting relative pulse volume easily.
-	// For a simpler fixed mix often cited:
-	// pulse_sum := m.pulseScale * (pulse1 + pulse2) // Use a combined pulse scale
-	// mix := pulse_sum + scaledTriangle + scaledNoise // + scaledDMC
-
-	// Mix using individual scales:
+	// Sum the scaled outputs
 	mix := scaledPulse1 + scaledPulse2 + scaledTriangle + scaledNoise // + scaledDMC
 
-	// --- Clamping ---
-	// Ensure the final output stays within the standard audio range [-1.0, 1.0].
-	// This prevents hard digital clipping artifacts if the mix exceeds the range.
-	finalOutput := clamp(mix, -1.0, 1.0)
+	// Apply DC blocking filter to remove constant offsets (improves audio quality)
+	// This is a simple high-pass filter that removes very low frequencies
+	m.dcOffset = m.dcOffset*m.dcBlockingAlpha + mix*(1.0-m.dcBlockingAlpha)
+	mix = mix - m.dcOffset
 
-	return finalOutput
+	// Apply hard limiting if enabled to prevent distortion
+	if m.useHardLimit {
+		if mix > m.hardLimit {
+			mix = m.hardLimit
+		} else if mix < -m.hardLimit {
+			mix = -m.hardLimit
+		}
+	} else {
+		// Ensure output is in the range [-1.0, 1.0] regardless
+		mix = clamp(mix, -1.0, 1.0)
+	}
+
+	return mix
 }
 
 // clamp ensures a value stays within the specified minimum and maximum bounds.

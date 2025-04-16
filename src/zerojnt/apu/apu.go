@@ -3,6 +3,7 @@ package apu
 import (
 	"log"
 	"sync"
+	"time"
 	"github.com/gordonklaus/portaudio"
 	"zerojnt/apu/channels"
 )
@@ -10,7 +11,10 @@ import (
 const (
 	// Audio System Configuration
 	SampleRate        = 44100 // Standard audio sample rate
-	BufferSizeSamples = 882   // ~20ms buffer at 44.1kHz: (44100 * 20) / 1000
+	BufferSizeSamples = 1764  // ~40ms buffer at 44.1kHz - DOUBLED for better stability
+	
+	// Debug flags
+	DebugAudio        = false // Set to true to enable audio debug logging
 
 	// NES Timing Constants (NTSC)
 	CpuClockSpeed     = 1789773.0 // Base CPU clock frequency
@@ -34,6 +38,11 @@ type APU struct {
 	bufferSwap    chan struct{}  // Signals when a buffer swap is needed
 	stream        *portaudio.Stream
 	mutex         sync.Mutex     // Protects shared APU state (buffers, timing, flags)
+	bufferStats   struct {
+		underruns int            // Count of buffer underruns (debug)
+		overruns  int            // Count of buffer overruns (debug)
+		lastReport time.Time     // Time of last stats report
+	}
 
 	// Frame Counter / Sequencer State
 	frameCounterCycles float64 // Tracks CPU cycles towards the next frame counter step
@@ -44,17 +53,20 @@ type APU struct {
 
 	// Sample Generation Timing
 	sampleGenCycles float64 // Tracks CPU cycles towards the next audio sample generation
+	
+	// Low-pass filter state for noise reduction
+	previousSample float32 // Previous output sample for simple low-pass filter
 
 	// CPU Synchronization
-	cpuCycleCounter uint64 // Tracks total CPU cycles processed by APU (optional, for debug/sync)
+	cpuCycleCounter uint64 // Tracks total CPU cycles processed by APU
 }
 
 // NewAPU creates and initializes a new APU instance.
 func NewAPU() (*APU, error) {
-	log.Println("Initializing APU...") // Added log message
+	log.Println("Initializing APU...")
 
 	apu := &APU{
-		pulse1:     channels.NewPulseChannel(1), // Pass channel number (1 or 2)
+		pulse1:     channels.NewPulseChannel(1),
 		pulse2:     channels.NewPulseChannel(2),
 		triangle:   channels.NewTriangleChannel(),
 		noise:      channels.NewNoiseChannel(),
@@ -62,12 +74,17 @@ func NewAPU() (*APU, error) {
 		buffer:     make([]float32, BufferSizeSamples),
 		backBuffer: make([]float32, BufferSizeSamples),
 		bufferSwap: make(chan struct{}, 1), // Buffered channel (size 1)
+		bufferStats: struct {
+			underruns  int
+			overruns   int
+			lastReport time.Time
+		}{
+			lastReport: time.Now(),
+		},
 	}
 
 	// Initialize APU registers to documented power-on values
-	// $4015 = 0x00 (all channels disabled) - Handled by channel Reset()
-	// $4017 = 0x00 (4-step sequence, IRQ disabled) - Set explicitly below
-	apu.WriteRegister(0x4017, 0x00)
+	apu.WriteRegister(0x4017, 0x00) // 4-step sequence, IRQ disabled
 
 	// Ensure channels start in their reset state
 	apu.pulse1.Reset()
@@ -75,10 +92,16 @@ func NewAPU() (*APU, error) {
 	apu.triangle.Reset()
 	apu.noise.Reset()
 
+	// Initialize and zero out buffers for clean audio start
+	for i := range apu.buffer {
+		apu.buffer[i] = 0.0
+		apu.backBuffer[i] = 0.0
+	}
+
 	// Initialize PortAudio
 	err := portaudio.Initialize()
 	if err != nil {
-		log.Printf("PortAudio Initialization Error: %v", err) // Log error
+		log.Printf("PortAudio Initialization Error: %v", err)
 		return nil, err
 	}
 
@@ -91,7 +114,7 @@ func NewAPU() (*APU, error) {
 		apu.audioCallback, // Function to provide audio data
 	)
 	if err != nil {
-		log.Printf("PortAudio Open Stream Error: %v", err) // Log error
+		log.Printf("PortAudio Open Stream Error: %v", err)
 		portaudio.Terminate()
 		return nil, err
 	}
@@ -100,7 +123,7 @@ func NewAPU() (*APU, error) {
 
 	// Start the audio stream
 	if err := stream.Start(); err != nil {
-		log.Printf("PortAudio Start Stream Error: %v", err) // Log error
+		log.Printf("PortAudio Start Stream Error: %v", err)
 		stream.Close()
 		portaudio.Terminate()
 		return nil, err
@@ -117,6 +140,27 @@ func NewAPU() (*APU, error) {
 // audioCallback is called by PortAudio when it needs more audio data.
 func (apu *APU) audioCallback(out []float32) {
 	apu.mutex.Lock()
+	
+	// Check if we have a complete buffer
+	if apu.bufferIndex < len(apu.backBuffer) {
+		// Buffer underrun - not enough samples were generated
+		if DebugAudio {
+			apu.bufferStats.underruns++
+			if time.Since(apu.bufferStats.lastReport) > 5*time.Second {
+				log.Printf("APU Stats: %d underruns, %d overruns", 
+					apu.bufferStats.underruns, apu.bufferStats.overruns)
+				apu.bufferStats.lastReport = time.Now()
+				apu.bufferStats.underruns = 0
+				apu.bufferStats.overruns = 0
+			}
+		}
+		
+		// Fill the remaining buffer with silence to prevent audible glitches
+		for i := apu.bufferIndex; i < len(apu.backBuffer); i++ {
+			apu.backBuffer[i] = 0.0
+		}
+	}
+	
 	// Provide the prepared buffer
 	copy(out, apu.buffer)
 	apu.mutex.Unlock()
@@ -124,10 +168,12 @@ func (apu *APU) audioCallback(out []float32) {
 	// Signal the bufferManager that a swap is needed
 	select {
 	case apu.bufferSwap <- struct{}{}:
+		// Signal sent successfully
 	default:
-		// If the channel is full, it means the bufferManager hasn't swapped yet.
-		// This might happen if the emulator loop is lagging. Audio might glitch.
-		// log.Println("APU Warning: Audio callback faster than buffer manager.") // Optional: Can be noisy
+		// Channel full - bufferManager hasn't processed previous signal yet
+		if DebugAudio {
+			log.Println("APU Warning: Audio callback faster than buffer manager")
+		}
 	}
 }
 
@@ -139,11 +185,13 @@ func (apu *APU) bufferManager() {
 		apu.buffer, apu.backBuffer = apu.backBuffer, apu.buffer
 		// Reset the index for the (now) backBuffer
 		apu.bufferIndex = 0
-		// Optionally clear the new backBuffer (helps catch buffer underruns visually in debug)
-		// for i := range apu.backBuffer { apu.backBuffer[i] = 0.0 }
+		// Clear the new backBuffer to ensure clean audio
+		for i := range apu.backBuffer {
+			apu.backBuffer[i] = 0.0
+		}
 		apu.mutex.Unlock()
 	}
-	log.Println("APU Buffer Manager stopped.") // Log when channel is closed
+	log.Println("APU Buffer Manager stopped.")
 }
 
 // Clock advances the APU state by one CPU cycle.
@@ -154,7 +202,6 @@ func (apu *APU) Clock() {
 
 	// --- Clock other channels every *other* CPU cycle ---
 	// This is a simplification; the exact timing is complex. This matches many emulators.
-	// Use cpuCycleCounter to alternate.
 	apu.cpuCycleCounter++
 	if apu.cpuCycleCounter%2 == 0 {
 		apu.pulse1.ClockTimer()
@@ -223,7 +270,9 @@ func (apu *APU) clockFrameSequencer() {
 		// Trigger IRQ on the last step (step 3) if not inhibited
 		if step == 3 && !apu.inhibitIRQ {
 			apu.irqPending = true
-			// log.Printf("APU: Frame IRQ triggered (Step %d, Inhibit: %v)", step, apu.inhibitIRQ) // Debug
+			if DebugAudio {
+				log.Printf("APU: Frame IRQ triggered (Step %d, Inhibit: %v)", step, apu.inhibitIRQ)
+			}
 		}
 
 		apu.frameSequenceStep = (apu.frameSequenceStep + 1) % 4
@@ -253,30 +302,36 @@ func (apu *APU) clockLengthAndSweep() {
 
 // generateSample creates one audio sample by mixing channel outputs.
 func (apu *APU) generateSample() {
-	sample := apu.mixer.MixChannels(
+	// Mix the channel outputs
+	newSample := apu.mixer.MixChannels(
 		apu.pulse1.Output(),
 		apu.pulse2.Output(),
 		apu.triangle.Output(),
 		apu.noise.Output(),
 		0, // DMC channel placeholder
 	)
+	
+	// Apply a simple low-pass filter to reduce noise (simple weighted average)
+	// 80% new sample, 20% previous sample
+	filteredSample := (newSample * 0.8) + (apu.previousSample * 0.2)
+	apu.previousSample = filteredSample
 
 	apu.mutex.Lock()
 	if apu.bufferIndex < len(apu.backBuffer) {
-		apu.backBuffer[apu.bufferIndex] = sample
+		apu.backBuffer[apu.bufferIndex] = filteredSample
 		apu.bufferIndex++
 	} else {
-		// Buffer overflow - audio generation is faster than consumption.
-		// This usually indicates an emulator timing issue or heavy system load.
-		// log.Println("APU Warning: Audio buffer overflow!") // Optional: Can be noisy
+		// Buffer overflow - audio generation is faster than consumption
+		if DebugAudio {
+			apu.bufferStats.overruns++
+		}
+		// We'll handle this on the next buffer swap
 	}
 	apu.mutex.Unlock()
 }
 
 // WriteRegister handles CPU writes to APU registers ($4000 - $4017).
 func (apu *APU) WriteRegister(addr uint16, value byte) {
-	// Most register writes require the mutex if they affect shared state or timing.
-	// Let channel methods handle their own locking if necessary (currently they don't).
 	apu.mutex.Lock()
 	defer apu.mutex.Unlock()
 
@@ -299,21 +354,27 @@ func (apu *APU) WriteRegister(addr uint16, value byte) {
 		// DMC enable (value & 0x10) - Not implemented
 		// Writing to $4015 clears the frame IRQ flag
 		apu.irqPending = false
-		// log.Printf("APU Write $4015 = %02X, IRQ Cleared", value) // Debug
+		if DebugAudio {
+			log.Printf("APU Write $4015 = %02X, IRQ Cleared", value)
+		}
 
 	case addr == 0x4017: // Frame Counter Control ($4017)
 		apu.sequenceMode5Step = (value & 0x80) != 0
 		apu.inhibitIRQ = (value & 0x40) != 0
-		// log.Printf("APU Write $4017 = %02X (Mode5: %v, InhibitIRQ: %v)", value, apu.sequenceMode5Step, apu.inhibitIRQ) // Debug
+		if DebugAudio {
+			log.Printf("APU Write $4017 = %02X (Mode5: %v, InhibitIRQ: %v)", 
+				value, apu.sequenceMode5Step, apu.inhibitIRQ)
+		}
 
 		// If IRQ inhibit flag is set, clear any pending IRQ
 		if apu.inhibitIRQ {
 			apu.irqPending = false
-			// log.Println("APU: IRQ Inhibited, pending flag cleared.") // Debug
+			if DebugAudio {
+				log.Println("APU: IRQ Inhibited, pending flag cleared.")
+			}
 		}
 
-		// Frame counter reset behavior (timing varies slightly by CPU cycle)
-		// Resetting the frame counter also clocks certain units immediately.
+		// Frame counter reset behavior
 		apu.frameCounterCycles = 0 // Reset cycle counter towards next step
 		apu.frameSequenceStep = 0  // Reset to step 0
 
@@ -321,15 +382,13 @@ func (apu *APU) WriteRegister(addr uint16, value byte) {
 		if apu.sequenceMode5Step {
 			apu.clockEnvelopesAndLinear()
 			apu.clockLengthAndSweep()
-			// log.Println("APU: Mode 5 set, immediate clocking triggered.") // Debug
+			if DebugAudio {
+				log.Println("APU: Mode 5 set, immediate clocking triggered.")
+			}
 		}
-		// Mode 0 (4-step) doesn't have the same immediate clocking on write to $4017.
-
-		// TODO: Add ~2-4 cycle delay emulation for frame counter reset if needed for specific games.
 
 	default:
-		// Ignore writes to unused registers in the APU range ($4014, $4016, $4018-$401F)
-		// Note: $4014 (OAMDMA) and $4016 (Controller) are handled elsewhere.
+		// Ignore writes to unused registers in the APU range
 	}
 }
 
@@ -355,38 +414,36 @@ func (apu *APU) ReadStatus() byte {
 
 	if apu.irqPending {
 		status |= 0x40
-		// log.Println("APU Read $4015: IRQ was pending.") // Debug
+		if DebugAudio {
+			log.Println("APU Read $4015: IRQ was pending.")
+		}
 	}
 
-	// Reading $4015 clears the frame IRQ flag *if* IRQs are not inhibited.
-	// However, common emulators clear it regardless. Let's clear unconditionally for simplicity.
-	// if !apu.inhibitIRQ {
-	// 	apu.irqPending = false
-	// }
-	// NESDev Wiki implies it *always* clears. Let's stick to that.
+	// NESDev Wiki implies it *always* clears the IRQ flag
 	apu.irqPending = false
-	// log.Printf("APU Read $4015 = %02X, IRQ Cleared", status) // Debug
+	
+	if DebugAudio {
+		log.Printf("APU Read $4015 = %02X, IRQ Cleared", status)
+	}
 
-	// TODO: Add DMC ($10) and APU IRQ ($40) status bits when implemented.
 	return status
 }
 
 // IRQ asserts the CPU IRQ line if the frame counter generated an interrupt.
 func (apu *APU) IRQ() bool {
-	// Reading the status doesn't require mutex lock if irqPending is atomic,
-	// but using mutex ensures consistency with writes/clears.
 	apu.mutex.Lock()
 	defer apu.mutex.Unlock()
 	return apu.irqPending
 }
 
 // ClearIRQ allows the CPU to acknowledge and clear the IRQ flag.
-// Note: Reading $4015 also clears the IRQ flag.
 func (apu *APU) ClearIRQ() {
 	apu.mutex.Lock()
 	apu.irqPending = false
 	apu.mutex.Unlock()
-	// log.Println("APU: CPU Cleared IRQ.") // Debug
+	if DebugAudio {
+		log.Println("APU: CPU Cleared IRQ.")
+	}
 }
 
 // Shutdown stops the audio stream and cleans up resources.
