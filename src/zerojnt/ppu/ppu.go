@@ -1,5 +1,5 @@
 // File: ./ppu/ppu.go
-// Rewritten with Fullscreen support and verified Framebuffer logic.
+// Contains the core PPU emulation logic, memory access, register handling, and rendering pipeline.
 
 /*
 Copyright 2014, 2014 Jonathan da Silva Santos
@@ -25,15 +25,15 @@ package ppu
 import (
 	"fmt"
 	"log" // Use log for errors/warnings
-	"os"
-	"unsafe" // <<<--- NEEDED for texture.Update with unsafe.Pointer
+	// "os" // Moved to ppu_display.go
+	// "unsafe" // Moved to ppu_display.go
 	"zerojnt/cartridge"
 	"zerojnt/ioports"
 	"zerojnt/mapper" // Import mapper
 
 	// "zerojnt/debug" // Keep commented if not actively used
 
-	"github.com/veandco/go-sdl2/sdl"
+	"github.com/veandco/go-sdl2/sdl" // Still needed for PPU struct definition
 )
 
 const (
@@ -72,7 +72,7 @@ type PPU struct {
 	SCANLINE int // Current scanline (-1 to 260)
 	// D           *debug.PPUDebug // Keep for potential future use (assuming debug package exists)
 
-	// SDL Resources
+	// SDL Resources - Defined here but initialized/used in ppu_display.go
 	texture  *sdl.Texture  // SDL texture to display the framebuffer
 	renderer *sdl.Renderer // SDL renderer
 	window   *sdl.Window   // SDL window
@@ -501,7 +501,7 @@ func StartPPU(io *ioports.IOPorts, cart *cartridge.Cartridge) (*PPU, error) {
 
 	ppu.colors = loadPalette()
 
-	// Initialize SDL Canvas (now fullscreen)
+	// Initialize SDL Canvas (now fullscreen) - Call the method from ppu_display.go
 	err := ppu.initCanvas()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize SDL canvas: %w", err)
@@ -509,49 +509,6 @@ func StartPPU(io *ioports.IOPorts, cart *cartridge.Cartridge) (*PPU, error) {
 
 	fmt.Printf("PPU Initialization complete (Fullscreen Mode)\n")
 	return ppu, nil
-}
-
-// checkKeyboard polls SDL events (basic quit handler).
-func (ppu *PPU) CheckKeyboard() { // Renamed to avoid conflict if other input handling exists
-	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-		switch event.(type) {
-		case *sdl.QuitEvent:
-			println("Quit event received")
-			ppu.Cleanup()
-			os.Exit(0)
-		case *sdl.KeyboardEvent:
-			// Example: Exit on Escape key press
-			if event.(*sdl.KeyboardEvent).Keysym.Scancode == sdl.SCANCODE_ESCAPE && event.(*sdl.KeyboardEvent).State == sdl.PRESSED {
-				println("Escape key pressed - Exiting")
-				ppu.Cleanup()
-				os.Exit(0)
-			}
-			// TODO: Add controller input mapping here if needed
-		}
-	}
-}
-
-// Cleanup releases SDL resources.
-func (ppu *PPU) Cleanup() {
-	log.Println("Cleaning up SDL resources...")
-	if ppu.texture != nil {
-		if err := ppu.texture.Destroy(); err != nil {
-			log.Printf("Error destroying texture: %v", err)
-		}
-		ppu.texture = nil
-	}
-	if ppu.renderer != nil {
-		ppu.renderer.Destroy() // Renderer destroy also handles textures associated? Check SDL docs. Safer to destroy texture explicitly.
-		ppu.renderer = nil
-	}
-	if ppu.window != nil {
-		if err := ppu.window.Destroy(); err != nil {
-			log.Printf("Error destroying window: %v", err)
-		}
-		ppu.window = nil
-	}
-	sdl.Quit() // Quit SDL subsystem
-	fmt.Println("SDL resources cleaned up.")
 }
 
 // isRenderingEnabled checks if background or sprite rendering is enabled via PPUMASK.
@@ -605,9 +562,9 @@ func (ppu *PPU) transferAddressX() {
 		return
 	}
 	// Copy coarse X (bits 0-4) and horizontal nametable select (bit 10)
-	// Mask for bits to keep in v: 111 01 11111 00000 = 0x7BE0 (Keep Y bits)
-	// Mask for bits to copy from t: 000 10 00000 11111 = 0x041F (Copy X bits)
-	ppu.v = (ppu.v & 0xFBE0) | (ppu.t & 0x041F) // Corrected mask usage based on NesDev wiki
+	// Mask for bits to keep in v: 111 01 11111 00000 = 0x7BE0 (Keep Y bits) -> Error in original comment, should be 111 11 11111 00000 = FBE0? No, keep Y and FineY -> 111 01 11111 00000 = 0x7BE0 is correct.
+	// Mask for bits to copy from t: 000 10 00000 11111 = 0x041F (Copy X bits) -> Correct.
+	ppu.v = (ppu.v & 0xFBE0) | (ppu.t & 0x041F) // Corrected mask usage based on NesDev wiki: V:[..H ..L. .M..] = T:[..H ..L. .M..] and V:[... ... ... .X.. XXXX] = T:[... ... ... .X.. XXXX] -> v[10] = t[10] and v[4..0]=t[4..0]
 }
 
 // transferAddressY copies vertical bits from t to v.
@@ -617,9 +574,9 @@ func (ppu *PPU) transferAddressY() {
 		return
 	}
 	// Copy fine Y (bits 12-14), coarse Y (bits 5-9), and vertical nametable select (bit 11)
-	// Mask for bits to keep in v: 000 10 00000 11111 = 0x041F (Keep X bits)
-	// Mask for bits to copy from t: 111 01 11111 00000 = 0x7BE0 (Copy Y bits)
-	ppu.v = (ppu.v & 0x841F) | (ppu.t & 0x7BE0) // Corrected mask usage based on NesDev wiki
+	// Mask for bits to keep in v: 000 10 00000 11111 = 0x041F (Keep X bits) -> Correct.
+	// Mask for bits to copy from t: 111 01 11111 00000 = 0x7BE0 (Copy Y bits) -> Correct.
+	ppu.v = (ppu.v & 0x841F) | (ppu.t & 0x7BE0) // Corrected mask usage based on NesDev wiki: copy fineY, coarseY, NT select Y.
 }
 
 // loadBackgroundShifters loads fetched tile data into background shift registers.
@@ -740,7 +697,7 @@ func (ppu *PPU) evaluateSprites() {
 		scanlineToCheck := ppu.SCANLINE        // We evaluate for the *next* scanline, which is currently being rendered (SCANLINE)
 
 		// Check if the sprite is vertically in range for the next scanline.
-		if spriteY <= scanlineToCheck && scanlineToCheck < (spriteY+spriteHeight) {
+		if scanlineToCheck >= 0 && spriteY <= scanlineToCheck && scanlineToCheck < (spriteY+spriteHeight) { // Added scanlineToCheck >= 0
 			// Sprite is vertically in range. Add to secondary OAM if space.
 			if numSpritesFound < 8 {
 				targetIdx := numSpritesFound * 4
@@ -794,7 +751,7 @@ func (ppu *PPU) fetchSprites() {
 	// Fetch data for sprites placed in secondaryOAM (up to spriteCount found previously)
 	for i := 0; i < ppu.spriteCount; i++ {
 		// Data from secondary OAM for the sprite being loaded
-		spriteY := uint16(ppu.secondaryOAM[i*4+0]) + 1 // Add 1 because OAM Y=0 is scanline 1
+		spriteY := uint16(ppu.secondaryOAM[i*4+0]) //+ 1 // Add 1 because OAM Y=0 is scanline 1 -> Removed +1, comparison in evaluateSprites handles this
 		tileIndex := ppu.secondaryOAM[i*4+1]
 		attributes := ppu.secondaryOAM[i*4+2]
 		spriteX := ppu.secondaryOAM[i*4+3]
@@ -803,14 +760,15 @@ func (ppu *PPU) fetchSprites() {
 		ppu.spriteCountersX[i] = spriteX    // X position counter for shifting
 		ppu.spriteLatches[i] = attributes // Attribute latch (palette, priority, flip)
 		// Determine if this slot holds sprite 0 based on whether sprite 0 hit was possible *and* this is the first sprite found
-		ppu.spriteIsSprite0[i] = ppu.spriteZeroHitPossible && (i == 0) // Flag set during eval of previous line
+		ppu.spriteIsSprite0[i] = ppu.spriteZeroHitPossible && (i == 0) // Flag set during eval of previous line // Bug? should be based on which sprite index is 0, not slot index. Reverted original logic which seems correct in context.
 
 		// Determine pattern row based on vertical flip and current scanline
 		flipHoriz := (attributes & 0x40) != 0
 		flipVert := (attributes & 0x80) != 0
 
 		scanlineToRender := uint16(ppu.SCANLINE) // Current scanline being rendered
-		row := scanlineToRender - spriteY        // Row within the sprite pattern (0-7 or 0-15)
+		// Calculate row relative to sprite's top edge (spriteY is the screen Y coord where sprite top appears)
+		row := scanlineToRender - uint16(spriteY)
 
 		if flipVert {
 			row = uint16(spriteHeight-1) - row // Adjust row for vertical flip
@@ -910,9 +868,9 @@ func (ppu *PPU) renderPixel() {
 		// Check horizontal clipping mask (leftmost 8 pixels)
 		if !(pixelX < 8 && !ppu.IO.PPUMASK.SHOW_LEFTMOST_8_SPRITE) {
 			// Iterate through the 8 sprite slots loaded for this scanline
-			for i := 0; i < 8; i++ { // Iterate all 8 potential slots
-				// Check if this sprite is active at the current pixel X (counter is 0) and is within the fetched sprites
-				if ppu.spriteCountersX[i] == 0 && i < ppu.spriteCount {
+			for i := 0; i < ppu.spriteCount; i++ { // Iterate only active sprites
+				// Check if this sprite is active at the current pixel X (counter is 0)
+				if ppu.spriteCountersX[i] == 0 {
 					// Get pixel bits from the sprite's pattern shifters (highest bit = leftmost pixel)
 					p0_spr := (ppu.spritePatternsLo[i] >> 7) & 1
 					p1_spr := (ppu.spritePatternsHi[i] >> 7) & 1
@@ -1040,20 +998,28 @@ func Process(ppu *PPU) {
 		}
 
 		// Cycles 257-320: Sprite Evaluation & Fetching for Scanline 0
-		if ppu.CYC == 256 { // End of main evaluation period
+		if ppu.CYC >= 1 && ppu.CYC <= 256 { // Evaluate sprites during cycles 1-256
 			if ppu.isRenderingEnabled() {
-				ppu.evaluateSprites() // Evaluate sprites for scanline 0
+				// Simplified: Evaluate everything at once at cycle 256.
+				// Real HW evaluates byte-by-byte.
+				if ppu.CYC == 256 {
+					ppu.evaluateSprites() // Evaluate sprites for scanline 0
+				}
 			}
 		}
-		if ppu.CYC == 257 { // Start of fetch period
+		if ppu.CYC >= 257 && ppu.CYC <= 320 { // Fetch sprites during cycles 257-320
 			if ppu.isRenderingEnabled() {
-				ppu.fetchSprites() // Fetch patterns for scanline 0 based on above evaluation
+				// Simplified: Fetch everything at once at cycle 257.
+				// Real HW fetches byte-by-byte.
+				if ppu.CYC == 257 {
+					ppu.fetchSprites() // Fetch patterns for scanline 0 based on above evaluation
+				}
 			}
 		}
-        // Cycle 257 also copies horizontal address bits if rendering is enabled
-        if ppu.isRenderingEnabled() && ppu.CYC == 257 {
-            ppu.transferAddressX()
-        }
+		// Cycle 257 also copies horizontal address bits if rendering is enabled
+		if ppu.isRenderingEnabled() && ppu.CYC == 257 {
+			ppu.transferAddressX()
+		}
 
 	// --- Scanlines 0-239: Visible Scanlines ---
 	} else if ppu.SCANLINE >= 0 && ppu.SCANLINE <= 239 {
@@ -1077,14 +1043,20 @@ func Process(ppu *PPU) {
 		}
 
 		// Cycles 257-320: Sprite Evaluation & Fetching for NEXT scanline (SL+1)
-		if ppu.CYC == 256 { // End of main evaluation period
+		if ppu.CYC >= 1 && ppu.CYC <= 256 { // Evaluate sprites during cycles 1-256
 			if ppu.isRenderingEnabled() {
-				ppu.evaluateSprites() // Evaluate sprites for scanline SL+1
+				// Simplified: Evaluate everything at once at cycle 256.
+				if ppu.CYC == 256 {
+					ppu.evaluateSprites() // Evaluate sprites for scanline SL+1
+				}
 			}
 		}
-		if ppu.CYC == 257 { // Start of fetch period
+		if ppu.CYC >= 257 && ppu.CYC <= 320 { // Fetch sprites during cycles 257-320
 			if ppu.isRenderingEnabled() {
-				ppu.fetchSprites() // Fetch patterns for scanline SL based on eval from SL-1
+				// Simplified: Fetch everything at once at cycle 257.
+				if ppu.CYC == 257 {
+					ppu.fetchSprites() // Fetch patterns for scanline SL based on eval from SL-1
+				}
 			}
 		}
 
@@ -1104,8 +1076,8 @@ func Process(ppu *PPU) {
 			// ---- FRAME BUFFER UPDATE TO TEXTURE ----
 			// Update screen & Check Keyboard once per frame AFTER VBlank starts
 			// This is where the completed SCREEN_DATA buffer is copied to the SDL texture.
-			ppu.ShowScreen()
-			ppu.CheckKeyboard() // Check for events like Quit or Escape
+			ppu.ShowScreen()      // Call method defined in ppu_display.go
+			ppu.CheckKeyboard() // Call method defined in ppu_display.go
 		}
 	} // End of scanline type checks
 
@@ -1147,7 +1119,7 @@ func (ppu *PPU) handleBackgroundFetchingAndShifting() {
 	if isFetchRange {
 		fetchCycleMod8 := ppu.CYC % 8
 		switch fetchCycleMod8 {
-		case 1: // Cycle 1, 9, 17, ..., 249, 257(no fetch), 321, 329, 337(no fetch)
+		case 1: // Cycle 1, 9, 17, ..., 249, 257(no fetch?), 321, 329, 337(no fetch?) -> Fetch should happen on 257/337, load happens on next cycle (2 or 322)
 			// Begin fetch cycle: Load shifters with next tile data (fetched previously)
 			ppu.loadBackgroundShifters()
 			// Fetch Nametable byte for the *next* tile (address based on v)
@@ -1167,110 +1139,4 @@ func (ppu *PPU) handleBackgroundFetchingAndShifting() {
 			// Loading of shifters with the fetched data happens at the *start* of the next cycle (case 1)
 		}
 	}
-}
-
-// initCanvas initializes SDL window, renderer, and texture for fullscreen display.
-func (ppu *PPU) initCanvas() error {
-	var winTitle string = "Alphanes (Fullscreen PPU Rewrite)"
-	var err error
-
-	if err = sdl.Init(sdl.INIT_VIDEO); err != nil {
-		return fmt.Errorf("failed to initialize SDL Video: %w", err)
-	}
-
-	// Create window in Fullscreen Desktop mode
-	// Width and height are ignored for FULLSCREEN_DESKTOP, it uses the monitor's current resolution.
-	ppu.window, err = sdl.CreateWindow(winTitle, sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
-		0, 0, // Ignored for fullscreen desktop
-		sdl.WINDOW_SHOWN|sdl.WINDOW_FULLSCREEN_DESKTOP) // Use fullscreen desktop flag
-	if err != nil {
-		sdl.Quit()
-		return fmt.Errorf("failed to create fullscreen window: %w", err)
-	}
-	log.Println("Fullscreen window created.")
-
-	// Create renderer with VSync enabled
-	ppu.renderer, err = sdl.CreateRenderer(ppu.window, -1, sdl.RENDERER_ACCELERATED|sdl.RENDERER_PRESENTVSYNC)
-	if err != nil {
-		ppu.window.Destroy()
-		sdl.Quit()
-		return fmt.Errorf("failed to create renderer: %w", err)
-	}
-	log.Println("Renderer created.")
-
-	// Set logical size to maintain NES aspect ratio within the fullscreen window
-	if err = ppu.renderer.SetLogicalSize(SCREEN_WIDTH, SCREEN_HEIGHT); err != nil {
-		log.Printf("Warning: Failed to set logical size: %v. Scaling might be incorrect.", err)
-		// Continue, but aspect ratio might be wrong
-	} else {
-		log.Printf("Logical size set to %dx%d.", SCREEN_WIDTH, SCREEN_HEIGHT)
-	}
-
-	// Use nearest neighbor scaling for pixel art look
-	if !sdl.SetHint(sdl.HINT_RENDER_SCALE_QUALITY, "0") {
-		log.Printf("Warning: Failed to set render scale quality hint to nearest neighbor.")
-	}
-
-	// Create texture for PPU output (streaming for efficient updates from framebuffer)
-	ppu.texture, err = ppu.renderer.CreateTexture(sdl.PIXELFORMAT_ARGB8888, sdl.TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT)
-	if err != nil {
-		ppu.renderer.Destroy()
-		ppu.window.Destroy()
-		sdl.Quit()
-		return fmt.Errorf("failed to create texture: %w", err)
-	}
-	log.Println("Streaming texture created.")
-
-	log.Println("SDL Canvas Initialized Successfully (Fullscreen)")
-	return nil
-}
-
-// ShowScreen updates the SDL texture with the PPU's framebuffer data (SCREEN_DATA) and presents it.
-// This should be called once per frame, typically at the start of VBlank.
-func (ppu *PPU) ShowScreen() {
-	if ppu.renderer == nil || ppu.texture == nil || ppu.window == nil {
-		log.Println("Warning: ShowScreen called but SDL resources are nil.")
-		return // Avoid panic if SDL resources were cleaned up
-	}
-
-	// Ensure the framebuffer has data before proceeding
-	if len(ppu.SCREEN_DATA) != SCREEN_WIDTH*SCREEN_HEIGHT {
-		log.Printf("Warning: ShowScreen called with incomplete or incorrectly sized framebuffer (%d elements).", len(ppu.SCREEN_DATA))
-		return
-	}
-
-	// Calculate pitch (bytes per row) for the texture format
-	pitch := int(SCREEN_WIDTH * 4) // ARGB8888 format = 4 bytes per pixel
-
-	// Get a pointer to the framebuffer data (unsafe operation)
-	// This provides direct memory access needed by UpdateTexture
-	pixelsPtr := unsafe.Pointer(&ppu.SCREEN_DATA[0])
-
-	// Update the SDL texture with the pixel data from the framebuffer
-	err := ppu.texture.Update(nil, pixelsPtr, pitch)
-	if err != nil {
-		// Log the error, but don't necessarily stop the emulator.
-		log.Printf("Warning: Failed to update SDL texture: %v", err)
-		// Consider if continuing makes sense if texture updates fail.
-	}
-
-	// Clear the renderer (optional, but good practice before drawing)
-	// Set background color for areas outside the logical size (if any)
-	if err = ppu.renderer.SetDrawColor(0, 0, 0, 255); err != nil { // Black bars
-		log.Printf("Warning: Failed to set draw color: %v", err)
-	}
-	if err = ppu.renderer.Clear(); err != nil {
-		log.Printf("Warning: Failed to clear SDL renderer: %v", err)
-	}
-
-	// Copy the updated texture to the renderer.
-	// SDL handles scaling from the texture's size (256x240) to the logical size,
-	// and then scales the logical size to fit the fullscreen window.
-	if err = ppu.renderer.Copy(ppu.texture, nil, nil); err != nil {
-		log.Printf("Warning: Failed to copy SDL texture to renderer: %v", err)
-		return // Critical if copy fails, likely nothing will display
-	}
-
-	// Present the renderer's contents to the window
-	ppu.renderer.Present()
 }
