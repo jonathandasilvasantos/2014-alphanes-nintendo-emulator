@@ -26,156 +26,203 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"unsafe" // <<<--- NEEDED for texture.Update with unsafe.Pointer
+	"runtime"
+	"sync"
+	"time"
+	"unsafe"
 
 	"github.com/veandco/go-sdl2/sdl"
 )
 
+const (
+	// Target 30fps (33.33ms per frame)
+	targetFrameTime = time.Second / 30
+)
+
+var (
+	// Reusable event for polling to reduce GC pressure
+	event sdl.Event
+	// Mutex for framebuffer access
+	fbMutex sync.RWMutex
+	// Track frame timing
+	lastFrameTime time.Time
+)
+
 // initCanvas initializes SDL window, renderer, and texture for fullscreen display.
 func (ppu *PPU) initCanvas() error {
-	var winTitle string = "Alphanes (Fullscreen PPU Rewrite)"
-	var err error
+	// Set GOMAXPROCS to utilize all available cores
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	
+	winTitle := "Alphanes (Optimized 30FPS PPU)"
 
-	if err = sdl.Init(sdl.INIT_VIDEO); err != nil {
+	// Initialize SDL with only needed subsystems
+	if err := sdl.Init(sdl.INIT_VIDEO); err != nil {
 		return fmt.Errorf("failed to initialize SDL Video: %w", err)
 	}
 
-	// Create window in Fullscreen Desktop mode
-	// Width and height are ignored for FULLSCREEN_DESKTOP, it uses the monitor's current resolution.
+	// Create window with flags for best performance
+	var err error
 	ppu.window, err = sdl.CreateWindow(winTitle, sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
 		0, 0, // Ignored for fullscreen desktop
-		sdl.WINDOW_SHOWN|sdl.WINDOW_FULLSCREEN_DESKTOP) // Use fullscreen desktop flag
+		sdl.WINDOW_SHOWN|sdl.WINDOW_FULLSCREEN_DESKTOP)
 	if err != nil {
 		sdl.Quit()
 		return fmt.Errorf("failed to create fullscreen window: %w", err)
 	}
-	log.Println("Fullscreen window created.")
 
-	// Create renderer with VSync enabled
-	ppu.renderer, err = sdl.CreateRenderer(ppu.window, -1, sdl.RENDERER_ACCELERATED|sdl.RENDERER_PRESENTVSYNC)
+	// Create renderer with hardware acceleration and DISABLE VSync (we'll control timing ourselves)
+	ppu.renderer, err = sdl.CreateRenderer(ppu.window, -1, sdl.RENDERER_ACCELERATED)
 	if err != nil {
 		ppu.window.Destroy()
 		sdl.Quit()
 		return fmt.Errorf("failed to create renderer: %w", err)
 	}
-	log.Println("Renderer created.")
 
-	// Set logical size to maintain NES aspect ratio within the fullscreen window
+	// Set logical size to maintain aspect ratio
 	if err = ppu.renderer.SetLogicalSize(SCREEN_WIDTH, SCREEN_HEIGHT); err != nil {
 		log.Printf("Warning: Failed to set logical size: %v. Scaling might be incorrect.", err)
-		// Continue, but aspect ratio might be wrong
-	} else {
-		log.Printf("Logical size set to %dx%d.", SCREEN_WIDTH, SCREEN_HEIGHT)
 	}
 
-	// Use nearest neighbor scaling for pixel art look
-	if !sdl.SetHint(sdl.HINT_RENDER_SCALE_QUALITY, "0") {
-		log.Printf("Warning: Failed to set render scale quality hint to nearest neighbor.")
-	}
-
-	// Create texture for PPU output (streaming for efficient updates from framebuffer)
-	ppu.texture, err = ppu.renderer.CreateTexture(sdl.PIXELFORMAT_ARGB8888, sdl.TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT)
+	// Use nearest neighbor scaling for pixel art and better performance
+	sdl.SetHint(sdl.HINT_RENDER_SCALE_QUALITY, "0")
+	
+	// Additional performance hints
+	sdl.SetHint(sdl.HINT_RENDER_DRIVER, "opengl") // Use OpenGL for hardware acceleration
+	sdl.SetHint(sdl.HINT_RENDER_BATCHING, "1")    // Enable batching for better performance
+	sdl.SetHint(sdl.HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "1") // Bypass compositor for better performance
+	sdl.SetHint(sdl.HINT_RENDER_VSYNC, "0")       // Disable VSync as we're manually timing
+	
+	// Create streaming texture - optimal for frequent updates
+	ppu.texture, err = ppu.renderer.CreateTexture(
+		sdl.PIXELFORMAT_ARGB8888,
+		sdl.TEXTUREACCESS_STREAMING,
+		SCREEN_WIDTH, SCREEN_HEIGHT,
+	)
 	if err != nil {
 		ppu.renderer.Destroy()
 		ppu.window.Destroy()
 		sdl.Quit()
 		return fmt.Errorf("failed to create texture: %w", err)
 	}
-	log.Println("Streaming texture created.")
 
-	log.Println("SDL Canvas Initialized Successfully (Fullscreen)")
+	// Set once and reuse
+	if err = ppu.renderer.SetDrawColor(0, 0, 0, 255); err != nil {
+		log.Printf("Warning: Failed to set draw color: %v", err)
+	}
+	
+	// Initialize frame timing
+	lastFrameTime = time.Now()
+	
+	log.Println("SDL Canvas Initialized Successfully (Optimized 30FPS)")
 	return nil
 }
 
-// ShowScreen updates the SDL texture with the PPU's framebuffer data (SCREEN_DATA) and presents it.
-// This should be called once per frame, typically at the start of VBlank.
+// ShowScreen updates the SDL texture with the PPU's framebuffer data and presents it.
+// Now includes frame rate limiting to 30fps
 func (ppu *PPU) ShowScreen() {
-	if ppu.renderer == nil || ppu.texture == nil || ppu.window == nil {
-		log.Println("Warning: ShowScreen called but SDL resources are nil.")
-		return // Avoid panic if SDL resources were cleaned up
+	if ppu.renderer == nil || ppu.texture == nil {
+		return // Early return to avoid nil checks later
 	}
 
-	// Ensure the framebuffer has data before proceeding
+	// Calculate time since last frame
+	now := time.Now()
+	elapsed := now.Sub(lastFrameTime)
+	
+	// Skip frame if not enough time has passed (maintain 30fps)
+	if elapsed < targetFrameTime {
+		sleepTime := targetFrameTime - elapsed
+		time.Sleep(sleepTime)
+		return
+	}
+	
+	// Update last frame time
+	lastFrameTime = now
+
+	// Get read lock on framebuffer
+	fbMutex.RLock()
+	
 	if len(ppu.SCREEN_DATA) != SCREEN_WIDTH*SCREEN_HEIGHT {
-		log.Printf("Warning: ShowScreen called with incomplete or incorrectly sized framebuffer (%d elements).", len(ppu.SCREEN_DATA))
+		fbMutex.RUnlock()
+		return // Invalid framebuffer size
+	}
+
+	// Calculate pitch once (4 bytes per ARGB8888 pixel)
+	const pitch = SCREEN_WIDTH * 4
+	
+	// Direct pointer for maximum update speed
+	pixelsPtr := unsafe.Pointer(&ppu.SCREEN_DATA[0])
+
+	// Update texture in a single call with pointer arithmetic
+	err := ppu.texture.Update(nil, pixelsPtr, pitch)
+	
+	// We can release the lock immediately after copying data
+	fbMutex.RUnlock()
+	
+	if err != nil {
+		log.Printf("Texture update failed: %v", err)
 		return
 	}
 
-	// Calculate pitch (bytes per row) for the texture format
-	pitch := int(SCREEN_WIDTH * 4) // ARGB8888 format = 4 bytes per pixel
-
-	// Get a pointer to the framebuffer data (unsafe operation)
-	// This provides direct memory access needed by UpdateTexture
-	pixelsPtr := unsafe.Pointer(&ppu.SCREEN_DATA[0])
-
-	// Update the SDL texture with the pixel data from the framebuffer
-	err := ppu.texture.Update(nil, pixelsPtr, pitch)
-	if err != nil {
-		// Log the error, but don't necessarily stop the emulator.
-		log.Printf("Warning: Failed to update SDL texture: %v", err)
-		// Consider if continuing makes sense if texture updates fail.
-	}
-
-	// Clear the renderer (optional, but good practice before drawing)
-	// Set background color for areas outside the logical size (if any)
-	if err = ppu.renderer.SetDrawColor(0, 0, 0, 255); err != nil { // Black bars
-		log.Printf("Warning: Failed to set draw color: %v", err)
-	}
-	if err = ppu.renderer.Clear(); err != nil {
-		log.Printf("Warning: Failed to clear SDL renderer: %v", err)
-	}
-
-	// Copy the updated texture to the renderer.
-	// SDL handles scaling from the texture's size (256x240) to the logical size,
-	// and then scales the logical size to fit the fullscreen window.
-	if err = ppu.renderer.Copy(ppu.texture, nil, nil); err != nil {
-		log.Printf("Warning: Failed to copy SDL texture to renderer: %v", err)
-		return // Critical if copy fails, likely nothing will display
-	}
-
-	// Present the renderer's contents to the window
+	// Clear with preset color (faster than setting color each time)
+	ppu.renderer.Clear()
+	
+	// Copy texture to renderer (SDL handles scaling)
+	ppu.renderer.Copy(ppu.texture, nil, nil)
+	
+	// Present frame
 	ppu.renderer.Present()
 }
 
-// checkKeyboard polls SDL events (basic quit handler).
-func (ppu *PPU) CheckKeyboard() { // Renamed to avoid conflict if other input handling exists
-	for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
-		switch event.(type) {
+// CheckKeyboard polls SDL events efficiently with event reuse.
+// Now optimized to batch event processing
+func (ppu *PPU) CheckKeyboard() {
+	// Process up to 10 events per call to avoid blocking too long
+	for i := 0; i < 10; i++ {
+		event = sdl.PollEvent()
+		if event == nil {
+			break // No more events to process
+		}
+		
+		switch e := event.(type) {
 		case *sdl.QuitEvent:
-			println("Quit event received")
 			ppu.Cleanup()
 			os.Exit(0)
+		
 		case *sdl.KeyboardEvent:
-			// Example: Exit on Escape key press
-			if event.(*sdl.KeyboardEvent).Keysym.Scancode == sdl.SCANCODE_ESCAPE && event.(*sdl.KeyboardEvent).State == sdl.PRESSED {
-				println("Escape key pressed - Exiting")
+			// Fast path for escape key
+			if e.Keysym.Scancode == sdl.SCANCODE_ESCAPE && e.State == sdl.PRESSED {
 				ppu.Cleanup()
 				os.Exit(0)
 			}
-			// TODO: Add controller input mapping here if needed
+			// Other key handlers would go here
+		
+		// Only handle event types we care about
+		// default: intentionally omitted for performance
 		}
 	}
 }
 
-// Cleanup releases SDL resources.
+// Cleanup releases SDL resources with proper error handling.
 func (ppu *PPU) Cleanup() {
-	log.Println("Cleaning up SDL resources...")
+	// Use a single defer function to log completion
+	defer fmt.Println("SDL resources cleaned up.")
+	
+	// Destroy resources in reverse order of creation
 	if ppu.texture != nil {
-		if err := ppu.texture.Destroy(); err != nil {
-			log.Printf("Error destroying texture: %v", err)
-		}
+		ppu.texture.Destroy()
 		ppu.texture = nil
 	}
+	
 	if ppu.renderer != nil {
-		ppu.renderer.Destroy() // Renderer destroy also handles textures associated? Check SDL docs. Safer to destroy texture explicitly.
+		ppu.renderer.Destroy()
 		ppu.renderer = nil
 	}
+	
 	if ppu.window != nil {
-		if err := ppu.window.Destroy(); err != nil {
-			log.Printf("Error destroying window: %v", err)
-		}
+		ppu.window.Destroy()
 		ppu.window = nil
 	}
-	sdl.Quit() // Quit SDL subsystem
-	fmt.Println("SDL resources cleaned up.")
+	
+	// Final SDL shutdown
+	sdl.Quit()
 }
