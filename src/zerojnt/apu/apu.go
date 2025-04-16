@@ -11,7 +11,7 @@ import (
 const (
 	// Audio System Configuration
 	SampleRate        = 44100 // Standard audio sample rate
-	BufferSizeSamples = 1764  // ~40ms buffer at 44.1kHz - DOUBLED for better stability
+	BufferSizeSamples = 3528  // ~40ms buffer at 44.1kHz - DOUBLED for better stability
 	
 	// Debug flags
 	DebugAudio        = false // Set to true to enable audio debug logging
