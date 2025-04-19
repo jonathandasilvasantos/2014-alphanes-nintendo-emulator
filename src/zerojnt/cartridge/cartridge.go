@@ -168,9 +168,12 @@ func LoadRom(filename string) (*Cartridge, error) {
 		cart.Mapper = &mapper.NROM{}
 	case 1:
 		cart.Mapper = &mapper.MMC1{}
+	case 2: // Add UNROM support
+		cart.Mapper = &mapper.UNROM{}
 	case 4: // *** ADDED MMC3 CASE ***
 		cart.Mapper = &mapper.MMC3{}
-	// Add other mappers here
+	
+		// Add other mappers here
 	default:
 		return nil, fmt.Errorf("unsupported mapper number: %d", cart.Header.MapperNum)
 	}

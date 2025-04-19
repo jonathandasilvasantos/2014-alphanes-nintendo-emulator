@@ -100,3 +100,9 @@ const (
 	CHR_BANK_SIZE_2K uint32 = 2048 // 2KB CHR bank size
 	SRAM_BANK_SIZE  uint32 = 8192  // 8KB SRAM size (common size)
 )
+
+// Helper function to check if a number is a power of two
+// This is useful for mappers that rely on power-of-two calculations
+func isPowerOfTwo(n uint32) bool {
+	return n > 0 && (n&(n-1)) == 0
+}
