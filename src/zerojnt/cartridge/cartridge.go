@@ -62,6 +62,8 @@ type Cartridge struct {
 	currentSingleScreenBank      byte
 
 	SRAMDirty bool // Flag for saving battery-backed RAM
+
+	// No explicit IRQLine needed here, CPU checks Mapper.IRQState() via accessor
 }
 
 // --- Cartridge Loading ---
@@ -140,9 +142,15 @@ func LoadRom(filename string) (*Cartridge, error) {
 	cart.PRG = make([]byte, MAPPED_PRG_SIZE) // Always 32KB for CPU view
 	cart.CHR = make([]byte, MAPPED_CHR_SIZE) // Always 8KB for PPU view (used for ROM banks or direct RAM access)
 
+	// Allocate CHR RAM if needed (must happen before mapper init)
+	if cart.Header.CHRSizeKB == 0 {
+		cart.CHR = make([]byte, CHR_RAM_SIZE) // Allocate 8KB for CHR RAM
+		log.Printf("Allocated %d KB CHR RAM", CHR_RAM_SIZE/1024)
+	}
+
 	if cart.Header.SRAMEnabled {
-		// TODO: Determine SRAM size more accurately if needed (e.g., from NES 2.0 header)
-		// For MMC1, usually 8KB or sometimes 32KB (SUROM). Let's default to 8KB.
+		// TODO: Determine SRAM size more accurately if needed (e.g., from NES 2.0 header or common mapper sizes)
+		// MMC3 often uses 8KB.
 		sramSize := SRAM_DEFAULT_SIZE
 		cart.SRAM = make([]byte, sramSize)
 		log.Printf("Initialized %d KB SRAM", sramSize/1024)
@@ -160,16 +168,22 @@ func LoadRom(filename string) (*Cartridge, error) {
 		cart.Mapper = &mapper.NROM{}
 	case 1:
 		cart.Mapper = &mapper.MMC1{}
+	case 4: // *** ADDED MMC3 CASE ***
+		cart.Mapper = &mapper.MMC3{}
 	// Add other mappers here
 	default:
 		return nil, fmt.Errorf("unsupported mapper number: %d", cart.Header.MapperNum)
+	}
+
+	if cart.Mapper == nil {
+		return nil, fmt.Errorf("failed to instantiate mapper %d", cart.Header.MapperNum)
 	}
 
 	cart.Mapper.Initialize(cart) // Pass the cartridge itself as the accessor
 	cart.Mapper.Reset()          // Perform initial bank/mirroring setup
 
 	log.Printf("Cartridge loaded successfully. Mapper: %d (%T)", cart.Header.MapperNum, cart.Mapper)
-	// verifyPRGROM(cart) // Optional debug verification
+	verifyPRGROM(cart) // Optional debug verification
 
 	return cart, nil
 }
@@ -212,7 +226,7 @@ func parseHeader(h *Header, b []byte) error {
 	} else {
 		// Determine if single screen mirroring is implied (uncommon, usually set by mapper)
 		// Header flag 6 bit 0 determines Vertical (1) or Horizontal (0)
-		// Mappers like MMC1 override this. We store the header default here.
+		// Mappers like MMC1/MMC3 override this. We store the header default here.
 		h.SingleScreenMirroring = false // Assume not single screen initially
 		h.SingleScreenBank = 0
 	}
@@ -257,7 +271,7 @@ func detectMMC1Variant(cart *Cartridge) {
 	// General Rules (can overlap, specific matches take precedence)
 	case prgSizeKB >= 512 && !hasChrRAM: // SUROM (512KB PRG, 8KB CHR RAM/ROM, 8KB SRAM), SXROM (>512KB)
 		if prgSizeKB == 512 {
-		    variant = "SUROM" // Example: Final Fantasy III (J)
+			variant = "SUROM" // Example: Final Fantasy III (J)
 		} else {
 			variant = "SXROM" // Example: Mechanized Attack
 		}
@@ -271,13 +285,13 @@ func detectMMC1Variant(cart *Cartridge) {
 		variant = "SZROM" // Example: Crystalis
 	// Fallback for common cases if specific sizes didn't match
 	case hasChrRAM && hasSRAM:
-	    variant = "SNROM/SOROM/SUROM/SXROM" // Could be any with CHR RAM + SRAM
+		variant = "SNROM/SOROM/SUROM/SXROM" // Could be any with CHR RAM + SRAM
 	case !hasChrRAM && hasSRAM:
-	    variant = "SKROM/SZROM" // Could be CHR ROM + SRAM
-    case hasChrRAM && !hasSRAM:
-        variant = "SGROM" // Likely SGROM
-    case !hasChrRAM && !hasSRAM:
-        variant = "SKROM" // Likely SKROM
+		variant = "SKROM/SZROM" // Could be CHR ROM + SRAM
+	case hasChrRAM && !hasSRAM:
+		variant = "SGROM" // Likely SGROM
+	case !hasChrRAM && !hasSRAM:
+		variant = "SKROM" // Likely SKROM
 
 	}
 
@@ -344,17 +358,20 @@ func (c *Cartridge) GetCHRRAMSize() uint32 {
 // CopyPRGData copies requested bank from OriginalPRG to the mapped PRG window.
 func (c *Cartridge) CopyPRGData(destOffset uint32, srcOffset uint32, length uint32) {
 	// Check source bounds (OriginalPRG)
+	if len(c.OriginalPRG) == 0 {
+		// log.Printf("DEBUG: CopyPRGData skipped - OriginalPRG size is 0.")
+		return
+	}
 	if srcOffset+length > uint32(len(c.OriginalPRG)) {
 		log.Printf("ERROR: CopyPRGData source out of bounds - srcOffset: %X, length: %X, OriginalPRG size: %X",
 			srcOffset, length, len(c.OriginalPRG))
 		// Optionally fill destination with a pattern? Or just return?
-		// For now, let's just log and potentially copy less if possible, or nothing.
 		// Adjust length if it exceeds source boundary partially
-        if srcOffset >= uint32(len(c.OriginalPRG)) {
-            return // Cannot copy anything
-        }
-        length = uint32(len(c.OriginalPRG)) - srcOffset
-        if length == 0 { return } // Should not happen if srcOffset check passed
+		if srcOffset >= uint32(len(c.OriginalPRG)) {
+			return // Cannot copy anything
+		}
+		length = uint32(len(c.OriginalPRG)) - srcOffset
+		if length == 0 { return } // Should not happen if srcOffset check passed
 	}
 
 	// Check destination bounds (Mapped PRG window)
@@ -362,11 +379,11 @@ func (c *Cartridge) CopyPRGData(destOffset uint32, srcOffset uint32, length uint
 		log.Printf("ERROR: CopyPRGData destination out of bounds - destOffset: %X, length: %X, PRG size: %X",
 			destOffset, length, len(c.PRG))
 		// Adjust length if it exceeds destination boundary partially
-        if destOffset >= uint32(len(c.PRG)) {
-            return // Cannot copy anything
-        }
-        length = uint32(len(c.PRG)) - destOffset
-         if length == 0 { return } // Should not happen if destOffset check passed
+		if destOffset >= uint32(len(c.PRG)) {
+			return // Cannot copy anything
+		}
+		length = uint32(len(c.PRG)) - destOffset
+		if length == 0 { return } // Should not happen if destOffset check passed
 	}
 
 	// Perform the copy
@@ -382,21 +399,25 @@ func (c *Cartridge) CopyCHRData(destOffset uint32, srcOffset uint32, length uint
 	}
 
 	// Check source bounds (OriginalCHR)
+	if len(c.OriginalCHR) == 0 {
+		// log.Printf("DEBUG: CopyCHRData skipped - OriginalCHR size is 0.")
+		return
+	}
 	if srcOffset+length > uint32(len(c.OriginalCHR)) {
 		log.Printf("ERROR: CopyCHRData source out of bounds - srcOffset: %X, length: %X, OriginalCHR size: %X",
 			srcOffset, length, len(c.OriginalCHR))
-        if srcOffset >= uint32(len(c.OriginalCHR)) { return }
-        length = uint32(len(c.OriginalCHR)) - srcOffset
-        if length == 0 { return }
+		if srcOffset >= uint32(len(c.OriginalCHR)) { return }
+		length = uint32(len(c.OriginalCHR)) - srcOffset
+		if length == 0 { return }
 	}
 
 	// Check destination bounds (Mapped CHR window)
 	if destOffset+length > uint32(len(c.CHR)) {
 		log.Printf("ERROR: CopyCHRData destination out of bounds - destOffset: %X, length: %X, CHR size: %X",
 			destOffset, length, len(c.CHR))
-        if destOffset >= uint32(len(c.CHR)) { return }
-        length = uint32(len(c.CHR)) - destOffset
-         if length == 0 { return }
+		if destOffset >= uint32(len(c.CHR)) { return }
+		length = uint32(len(c.CHR)) - destOffset
+		if length == 0 { return }
 	}
 
 	// Perform the copy
@@ -435,6 +456,23 @@ func (c *Cartridge) GetCurrentMirroringType() (v, h, four, single bool, bank byt
 	return c.currentVerticalMirroring, c.currentHorizontalMirroring, c.currentFourScreenVRAM, c.currentSingleScreenMirroring, c.currentSingleScreenBank
 }
 
+// --- IRQ Handling for MapperAccessor ---
+
+// IRQState checks the mapper's current IRQ status.
+func (c *Cartridge) IRQState() bool {
+	if c.Mapper != nil {
+		return c.Mapper.IRQState()
+	}
+	return false
+}
+
+// ClockIRQCounter tells the mapper to clock its internal IRQ counter.
+func (c *Cartridge) ClockIRQCounter() {
+	if c.Mapper != nil {
+		c.Mapper.ClockIRQCounter()
+	}
+}
+
 
 // verifyPRGROM - Optional debug helper
 func verifyPRGROM(cart *Cartridge) {
@@ -461,8 +499,10 @@ func verifyPRGROM(cart *Cartridge) {
 
 	// Check Reset Vector in the *mapped* PRG window (should reflect the currently mapped last bank)
 	if len(cart.PRG) == MAPPED_PRG_SIZE {
-		resetVectorLow := cart.PRG[0x7FFC] // $FFFF - $8000 + $7FFC = $FFFC relative to $8000 start
-		resetVectorHigh := cart.PRG[0x7FFD]
+		// Correct index: $FFFC relative to $8000 start is index 0x7FFC ($FFFF - $8000 + 1 = $8000 -> index 0x7FFF)
+		// Indices are $8000 -> 0, $8001 -> 1, ..., $FFFC -> 0x7FFC, $FFFD -> 0x7FFD
+		resetVectorLow := cart.PRG[0x7FFC]  // <-- FIXED: Was 'c.PRG', now 'cart.PRG'
+		resetVectorHigh := cart.PRG[0x7FFD] // <-- FIXED: Was 'c.PRG', now 'cart.PRG'
 		fmt.Printf("Mapped Reset Vector (@$FFFC): $%02X%02X\n", resetVectorHigh, resetVectorLow)
 	}
 	fmt.Println("----------------------------")

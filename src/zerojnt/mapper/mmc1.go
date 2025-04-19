@@ -452,3 +452,13 @@ func (m *MMC1) copyBanks() {
 		m.cart.CopyCHRData(4096, m.state.chrBankOffset4k1, 4096)
 	}
 }
+
+// IRQState returns false as MMC1 does not generate IRQs.
+func (m *MMC1) IRQState() bool {
+	return false
+}
+
+// ClockIRQCounter does nothing for MMC1.
+func (m *MMC1) ClockIRQCounter() {
+	// MMC1 has no IRQ counter
+}

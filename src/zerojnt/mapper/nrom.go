@@ -113,3 +113,13 @@ func (m *NROM) Write(addr uint16, value byte) {
 	// Writes to $8000-$FFFF are ignored by NROM hardware (writes to ROM).
 	// log.Printf("NROM Write Ignored: Addr=%04X Val=%02X", addr, value)
 }
+
+// IRQState returns false as NROM does not generate IRQs.
+func (m *NROM) IRQState() bool {
+	return false
+}
+
+// ClockIRQCounter does nothing for NROM.
+func (m *NROM) ClockIRQCounter() {
+	// NROM has no IRQ counter
+}

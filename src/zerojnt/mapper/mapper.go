@@ -43,6 +43,10 @@ type MapperAccessor interface {
 	// --- Mirroring Control ---
 	HasFourScreenVRAM() bool                                                 // Check four-screen VRAM flag
 	SetMirroringMode(vertical, horizontal, fourScreen bool, singleScreenBank byte) // Tell Cartridge how to mirror nametables
+
+	// --- IRQ Handling (Needed for MMC3 and others) ---
+	IRQState() bool // Returns true if the mapper is currently asserting an IRQ
+	ClockIRQCounter() // Clocks the mapper's IRQ counter (e.g., MMC3 scanline counter)
 }
 
 // Mapper interface defines the methods that all mappers must implement.
@@ -71,6 +75,10 @@ type Mapper interface {
 	// Write handles CPU writes to mapper registers ($8000-$FFFF) or potentially PRG RAM ($6000-$7FFF).
 	// This method is responsible for updating internal mapper state and triggering bank/mirroring updates.
 	Write(addr uint16, value byte)
+
+	// --- IRQ Handling ---
+	IRQState() bool // Check if the mapper is currently asserting the IRQ line
+	ClockIRQCounter() // Signal the mapper to clock its IRQ counter (e.g., on PPU A12 edge or scanline)
 }
 
 // MapperError represents mapper-specific errors
@@ -85,7 +93,10 @@ func (e *MapperError) Error() string {
 
 // Memory bank size constants (use consistent uint32)
 const (
-	PRG_BANK_SIZE uint32 = 16384 // 16KB PRG ROM bank size
-	CHR_BANK_SIZE uint32 = 8192  // 8KB CHR ROM/RAM bank size
-	SRAM_BANK_SIZE uint32 = 8192 // 8KB SRAM size (common size)
+	PRG_BANK_SIZE   uint32 = 16384 // 16KB PRG ROM bank size
+	PRG_BANK_SIZE_8K uint32 = 8192 // 8KB PRG ROM bank size
+	CHR_BANK_SIZE   uint32 = 8192  // 8KB CHR ROM/RAM bank size
+	CHR_BANK_SIZE_1K uint32 = 1024 // 1KB CHR bank size
+	CHR_BANK_SIZE_2K uint32 = 2048 // 2KB CHR bank size
+	SRAM_BANK_SIZE  uint32 = 8192  // 8KB SRAM size (common size)
 )
