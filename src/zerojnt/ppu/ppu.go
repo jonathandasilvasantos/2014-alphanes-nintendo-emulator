@@ -92,7 +92,7 @@ type PPU struct {
 	spritePatternsHi [8]byte // Pattern high bytes for up to 8 sprites
 	spriteCountersX  [8]byte // X position counters for sprites
 	spriteLatches    [8]byte // Attribute latches for sprites
-	spriteIsSprite0  [8]bool // Tracks if a secondary OAM slot holds sprite 0
+	spriteIsSprite0  [8]bool // Tracks if a secondary OAM slot holds sprite 0 (More accurately: tracks if sprite 0 *could be* in this slot)
 
 	spriteZeroHitPossible bool // Sprite 0 is in secondary OAM for the next scanline
 	spriteZeroBeingRendered bool // Sprite 0 is potentially outputting an opaque pixel on the current cycle
@@ -185,7 +185,7 @@ func (ppu *PPU) ReadPPUMemory(addr uint16) byte {
 
 		// Ensure physicalCHRAddr is valid before accessing chrData
 		if physicalCHRAddr == 0xFFFF { // 0xFFFF indicates unmapped/invalid
-			log.Printf("Warning: PPU Read CHR mapped to invalid address %04X from PPU address %04X", physicalCHRAddr, addr)
+			//log.Printf("Warning: PPU Read CHR mapped to invalid address %04X from PPU address %04X", physicalCHRAddr, addr)
 			return 0 // Return 0 for invalid mapping
 		}
 
@@ -193,8 +193,7 @@ func (ppu *PPU) ReadPPUMemory(addr uint16) byte {
 			return chrData[physicalCHRAddr]
 		}
 
-		log.Printf("Warning: PPU Read CHR mapped address %04X out of CHR buffer bounds (%d) for PPU address %04X",
-			physicalCHRAddr, len(chrData), addr)
+		//log.Printf("Warning: PPU Read CHR mapped address %04X out of CHR buffer bounds (%d) for PPU address %04X", physicalCHRAddr, len(chrData), addr)
 		return 0 // Return 0 to prevent crash on out-of-bounds read
 
 	case addr >= 0x2000 && addr < 0x3F00: // Nametables
@@ -252,7 +251,7 @@ func (ppu *PPU) WritePPUMemory(addr uint16, data byte) {
 		if ppu.Cart.GetCHRSize() == 0 { // CHR Size 0 implies RAM
 			physicalCHRAddr := ppu.Cart.Mapper.MapPPU(addr)
 			if physicalCHRAddr == 0xFFFF {
-				log.Printf("Warning: PPU Write CHR RAM mapped to invalid address %04X from PPU address %04X", physicalCHRAddr, addr)
+				//log.Printf("Warning: PPU Write CHR RAM mapped to invalid address %04X from PPU address %04X", physicalCHRAddr, addr)
 				return
 			}
 			chrRAM := ppu.Cart.CHR // Access the CHR slice, which should be RAM
@@ -752,12 +751,12 @@ func (ppu *PPU) fetchSprites() {
 		// Load sprite state for the rendering pipeline
 		ppu.spriteCountersX[i] = spriteX    // X position counter for shifting
 		ppu.spriteLatches[i] = attributes // Attribute latch (palette, priority, flip)
-		// Determine if this slot holds sprite 0: Use spriteZeroHitPossible flag (set if sprite 0 was found during eval) AND check if this is the first sprite (i=0)
-		// The sprite in secondary OAM slot 0 is not necessarily sprite 0 from primary OAM.
-		// We need a way to track which sprite entry (0-63) ended up in which secondary slot, or rely on the spriteZeroHitPossible flag.
-		// Assuming spriteZeroHitPossible correctly reflects if OAM[0] was found during evaluation, and the *first* matching sprite goes into slot 0.
-		// This logic seems suspect. Let's simplify: spriteZeroHitPossible is the source of truth for sprite 0 presence.
-		ppu.spriteIsSprite0[i] = ppu.spriteZeroHitPossible && (i == 0) // Flag indicates if Sprite 0 is *present*. This slot check is problematic. Let's track it during render.
+
+		// Determine if this slot *might* correspond to sprite 0.
+		// This relies on spriteZeroHitPossible being set if OAM[0] was found AND
+		// assuming the first sprite found (if it was OAM[0]) goes into slot 0.
+		// This is an approximation. A more robust method would track the OAM index (0-63).
+		ppu.spriteIsSprite0[i] = ppu.spriteZeroHitPossible && (i == 0)
 
 		// Determine pattern row based on vertical flip and current scanline
 		flipHoriz := (attributes & 0x40) != 0
@@ -881,10 +880,8 @@ func (ppu *PPU) renderPixel() {
 						sprPriority = (ppu.spriteLatches[i] & 0x20) >> 5 // Bit 5 = priority (0=FG, 1=BG)
 						sprIsOpaque = true
 
-						// Check if this opaque pixel belongs to sprite 0
-						// Sprite 0 is identified by the spriteZeroHitPossible flag during evaluation.
-						// If spriteZeroHitPossible is true, the sprite loaded into slot 0 *is* sprite 0.
-						if ppu.spriteZeroHitPossible && i == 0 {
+						// Check if this opaque pixel belongs to sprite 0 using our tracked flag
+						if ppu.spriteIsSprite0[i] { // Check if this slot was identified as holding sprite 0
 							spriteZeroPixelRendered = true // An opaque pixel from sprite 0 is rendering now
 						}
 
@@ -1009,6 +1006,13 @@ func Process(ppu *PPU) {
 			ppu.transferAddressX()
 		}
 
+		// *** MMC3 IRQ Clocking ***
+		// Clock the mapper's IRQ counter near the end of the visible rendering fetches.
+		// Cycle 260 is a common approximation. Only clock if rendering is enabled.
+		if ppu.isRenderingEnabled() && ppu.CYC == 260 {
+			ppu.Cart.ClockIRQCounter()
+		}
+
 	// --- Scanlines 0-239: Visible Scanlines ---
 	} else if ppu.SCANLINE >= 0 && ppu.SCANLINE <= 239 {
 
@@ -1038,6 +1042,13 @@ func Process(ppu *PPU) {
 		// Sprite Fetching (Simplified: Happens conceptually during cycles 257-320)
 		if ppu.CYC == 257 && ppu.isRenderingEnabled() {
 			ppu.fetchSprites() // Fetch patterns for scanline SL based on eval from SL-1
+		}
+
+		// *** MMC3 IRQ Clocking ***
+		// Clock the mapper's IRQ counter near the end of the visible rendering fetches.
+		// Cycle 260 is a common approximation. Only clock if rendering is enabled.
+		if ppu.isRenderingEnabled() && ppu.CYC == 260 {
+			ppu.Cart.ClockIRQCounter()
 		}
 
 	// --- Scanline 240: Post-render Scanline ---
