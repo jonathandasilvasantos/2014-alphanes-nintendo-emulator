@@ -30,6 +30,15 @@ type PPU_STATUS struct {
 	VBLANK          bool // Bit 7: Vertical Blank flag. Set at dot 1 of scanline 241. Cleared by reading $2002 or at dot 1 of pre-render line.
 }
 
+type Controller struct {
+	// EXPORTED fields allow access from ppu (keyboard) and cpu (memory read/write) packages.
+	CurrentButtons byte  `json:"current_buttons"` // Live keyboard/gamepad state (bit=1 pressed)
+	LatchedButtons byte  `json:"latched_buttons"` // Copy made when strobe=1→0 or strobe=1
+	Strobe         bool  `json:"strobe"`          // Last value written to $4016 bit0 (1=latching, 0=shifting)
+	ShiftCounter   uint8 `json:"shift_counter"`   // 0-7: which bit is next to be read via $4016/7 when Strobe=0
+}
+
+
 // Get returns the byte value of the PPUSTATUS register
 func (s *PPU_STATUS) Get() byte {
 	var status byte = 0
@@ -169,6 +178,8 @@ type IOPorts struct {
 	VRAM       [2048]byte // 2KB Nametable RAM (used if not FourScreen)
 	PaletteRAM [32]byte   // 32 bytes Palette RAM
 	OAM        [256]byte  // 256 bytes Primary Object Attribute Memory (Sprites)
+
+	Controllers [2]Controller
 
 	// PPU Registers State (as seen by CPU)
 	PPUCTRL   PPU_CTRL
