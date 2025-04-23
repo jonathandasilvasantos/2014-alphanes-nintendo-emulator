@@ -25,7 +25,6 @@ package ppu
 import (
 	"fmt"
 	"log"
-	"os"
 	"runtime"
 	"sync"
 	"time"
@@ -171,35 +170,6 @@ func (ppu *PPU) ShowScreen() {
 	
 	// Present frame
 	ppu.renderer.Present()
-}
-
-// CheckKeyboard polls SDL events efficiently with event reuse.
-// Now optimized to batch event processing
-func (ppu *PPU) CheckKeyboard() {
-	// Process up to 10 events per call to avoid blocking too long
-	for i := 0; i < 10; i++ {
-		event = sdl.PollEvent()
-		if event == nil {
-			break // No more events to process
-		}
-		
-		switch e := event.(type) {
-		case *sdl.QuitEvent:
-			ppu.Cleanup()
-			os.Exit(0)
-		
-		case *sdl.KeyboardEvent:
-			// Fast path for escape key
-			if e.Keysym.Scancode == sdl.SCANCODE_ESCAPE && e.State == sdl.PRESSED {
-				ppu.Cleanup()
-				os.Exit(0)
-			}
-			// Other key handlers would go here
-		
-		// Only handle event types we care about
-		// default: intentionally omitted for performance
-		}
-	}
 }
 
 // Cleanup releases SDL resources with proper error handling.

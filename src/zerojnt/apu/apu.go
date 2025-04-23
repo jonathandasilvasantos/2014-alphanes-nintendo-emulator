@@ -185,10 +185,6 @@ func (apu *APU) bufferManager() {
 		apu.buffer, apu.backBuffer = apu.backBuffer, apu.buffer
 		// Reset the index for the (now) backBuffer
 		apu.bufferIndex = 0
-		// Clear the new backBuffer to ensure clean audio
-		for i := range apu.backBuffer {
-			apu.backBuffer[i] = 0.0
-		}
 		apu.mutex.Unlock()
 	}
 	log.Println("APU Buffer Manager stopped.")
@@ -301,34 +297,35 @@ func (apu *APU) clockLengthAndSweep() {
 }
 
 // generateSample creates one audio sample by mixing channel outputs.
+// generateSample produces one filtered sample and pushes it to the
+// backBuffer.  The CPU thread is the only writer, so we don’t take
+// a mutex here; buffer swaps happen only after the audio callback
+// finishes reading the *front* buffer and signals for a swap.
 func (apu *APU) generateSample() {
-	// Mix the channel outputs
+	// ── 1. Mix channels (all outputs are 0 – 1 floats) ────────────────
 	newSample := apu.mixer.MixChannels(
 		apu.pulse1.Output(),
 		apu.pulse2.Output(),
 		apu.triangle.Output(),
 		apu.noise.Output(),
-		0, // DMC channel placeholder
+		0, // DMC placeholder
 	)
-	
-	// Apply a simple low-pass filter to reduce noise (simple weighted average)
-	// 80% new sample, 20% previous sample
-	filteredSample := (newSample * 0.8) + (apu.previousSample * 0.2)
-	apu.previousSample = filteredSample
 
-	apu.mutex.Lock()
-	if apu.bufferIndex < len(apu.backBuffer) {
-		apu.backBuffer[apu.bufferIndex] = filteredSample
-		apu.bufferIndex++
-	} else {
-		// Buffer overflow - audio generation is faster than consumption
-		if DebugAudio {
-			apu.bufferStats.overruns++
-		}
-		// We'll handle this on the next buffer swap
+	// ── 2. Very small one-tap low-pass (80 % new + 20 % prev) ────────
+	filtered := (newSample * 0.8) + (apu.previousSample * 0.2)
+	apu.previousSample = filtered
+
+	// ── 3. Store into the producer buffer  ───────────────────────────
+	idx := apu.bufferIndex
+	if idx < len(apu.backBuffer) {
+		apu.backBuffer[idx] = filtered
+		apu.bufferIndex = idx + 1
+	} else if DebugAudio {
+		apu.bufferStats.overruns++
+		// No action needed: the next buffer swap will discard the excess.
 	}
-	apu.mutex.Unlock()
 }
+
 
 // WriteRegister handles CPU writes to APU registers ($4000 - $4017).
 func (apu *APU) WriteRegister(addr uint16, value byte) {
