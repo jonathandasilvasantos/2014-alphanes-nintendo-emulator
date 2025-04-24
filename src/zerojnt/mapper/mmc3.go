@@ -106,7 +106,7 @@ func (m *MMC3) Reset() {
 	for i := range m.state.bankRegisters {
 		m.state.bankRegisters[i] = 0
 	}
-	m.state.mirroringMode = MMC3_MIRROR_VERTICAL // Default? Seems plausible.
+	m.state.mirroringMode = MMC3_MIRROR_VERTICAL // Default
 	m.state.prgRAMEnabled = true                 // Typically enabled by default
 	m.state.prgRAMWriteProtect = false           // Typically writable by default
 
@@ -118,20 +118,19 @@ func (m *MMC3) Reset() {
 	m.state.irqPending = false
 
 	// Update banks and mirroring based on reset state
-	m.updateBanks()     // Calculates initial offsets
-	m.updateMirroring() // Sets initial mirroring
-	m.copyBanks()       // Copies initial PRG/CHR data
+	m.updateBanks()     
+	m.updateMirroring() 
+	m.copyBanks()       
 	log.Println("MMC3 Reset complete.")
 }
 
 // updateBanks calculates the effective bank offsets based on current registers. Called with lock held.
 func (m *MMC3) updateBanks() {
-	// --- PRG ROM Banking ---
-	// Bank select bit 6 determines which banks are fixed/switchable
+	// PRG ROM Banking
 	prgMode0 := (m.state.bankSelect & 0x40) == 0 // R6/R7 control $8000/$A000
 
 	// Get selected bank numbers from registers R6 and R7
-	// Mask bank numbers to be within the available range (wrap around)
+	// Mask bank numbers to be within the available range
 	prgBankMask8k := uint32(0)
 	if m.state.numPrgBanks8k > 0 {
 		prgBankMask8k = m.state.numPrgBanks8k - 1
@@ -161,11 +160,11 @@ func (m *MMC3) updateBanks() {
 		m.state.prgOffsets[3] = fixedBankE000 * PRG_BANK_SIZE_8K // $E000 fixed -> last
 	}
 
-	// --- CHR ROM/RAM Banking ---
+	// CHR ROM/RAM Banking
 	chrMode0 := (m.state.bankSelect & 0x80) == 0 // R0/R1 are 2KB, R2-R5 are 1KB
 
 	// Get selected bank numbers from registers R0-R5
-	// Mask bank numbers to be within the available range (wrap around)
+	// Mask bank numbers to be within the available range
 	chrBankMask1k := uint32(0)
 	if m.state.numChrBanks1k > 0 {
 		chrBankMask1k = m.state.numChrBanks1k - 1
@@ -175,8 +174,7 @@ func (m *MMC3) updateBanks() {
 	r0_2k := uint32(m.state.bankRegisters[0] & 0xFE) // Ignore bit 0 for 2KB banks
 	r1_2k := uint32(m.state.bankRegisters[1] & 0xFE) // Ignore bit 0 for 2KB banks
 
-	// Apply mask (NOTE: Masking needs care for 2KB banks as well)
-	// A 2KB bank consumes 2 1KB slots. The mask should apply to the effective 1KB index.
+	// Apply mask for 2KB banks
 	r0_2k &= chrBankMask1k & ^uint32(1) // Mask ensuring it's an even boundary and within range
 	r1_2k &= chrBankMask1k & ^uint32(1) // Mask ensuring it's an even boundary and within range
 
@@ -185,10 +183,9 @@ func (m *MMC3) updateBanks() {
 	r3 := uint32(m.state.bankRegisters[3]) & chrBankMask1k
 	r4 := uint32(m.state.bankRegisters[4]) & chrBankMask1k
 	r5 := uint32(m.state.bankRegisters[5]) & chrBankMask1k
-	// Removed declarations of r0_1k and r1_1k as they are not used in chrMode1
 
-	// CHR mapping logic based on target PPU address ranges:
-	if chrMode0 { // $0000(2K), $0800(2K), $1000(1K), $1400(1K), $1800(1K), $1C00(1K)
+	// CHR mapping logic based on target PPU address ranges
+	if chrMode0 { 
 		m.state.chrOffsets[0] = r0_2k * CHR_BANK_SIZE_1K // $0000-$07FF
 		m.state.chrOffsets[1] = r0_2k*CHR_BANK_SIZE_1K + CHR_BANK_SIZE_1K
 		m.state.chrOffsets[2] = r1_2k * CHR_BANK_SIZE_1K // $0800-$0FFF
@@ -197,7 +194,7 @@ func (m *MMC3) updateBanks() {
 		m.state.chrOffsets[5] = r3 * CHR_BANK_SIZE_1K    // $1400-$17FF
 		m.state.chrOffsets[6] = r4 * CHR_BANK_SIZE_1K    // $1800-$1BFF
 		m.state.chrOffsets[7] = r5 * CHR_BANK_SIZE_1K    // $1C00-$1FFF
-	} else { // $0000(1K), $0400(1K), $0800(1K), $0C00(1K), $1000(2K), $1800(2K)
+	} else { 
 		m.state.chrOffsets[0] = r2 * CHR_BANK_SIZE_1K    // $0000-$03FF
 		m.state.chrOffsets[1] = r3 * CHR_BANK_SIZE_1K    // $0400-$07FF
 		m.state.chrOffsets[2] = r4 * CHR_BANK_SIZE_1K    // $0800-$0BFF
@@ -229,8 +226,6 @@ func (m *MMC3) copyBanks() {
 		m.cart.CopyCHRData(5*CHR_BANK_SIZE_1K, m.state.chrOffsets[5], CHR_BANK_SIZE_1K)
 		m.cart.CopyCHRData(6*CHR_BANK_SIZE_1K, m.state.chrOffsets[6], CHR_BANK_SIZE_1K)
 		m.cart.CopyCHRData(7*CHR_BANK_SIZE_1K, m.state.chrOffsets[7], CHR_BANK_SIZE_1K)
-	} else if m.state.hasChrRAM {
-		// No copy needed for CHR RAM, PPU accesses it directly via Cartridge.CHR buffer
 	}
 }
 
@@ -247,7 +242,7 @@ func (m *MMC3) updateMirroring() {
 
 // MapCPU maps a CPU address ($6000-$FFFF) to a PRG ROM/RAM offset.
 func (m *MMC3) MapCPU(addr uint16) (isROM bool, mappedAddr uint16) {
-	m.mutex.RLock() // Read lock sufficient
+	m.mutex.RLock() 
 	defer m.mutex.RUnlock()
 
 	if addr >= 0x6000 && addr <= 0x7FFF {
@@ -261,8 +256,6 @@ func (m *MMC3) MapCPU(addr uint16) (isROM bool, mappedAddr uint16) {
 	if addr >= 0x8000 {
 		// Address relative to the 32KB window ($8000-$FFFF)
 		relativeAddr := addr - 0x8000
-		// Return the offset within the 32KB mapped PRG window
-		// The actual bank data is handled by copyBanks()
 		return true, relativeAddr
 	}
 
@@ -277,7 +270,6 @@ func (m *MMC3) MapPPU(addr uint16) uint16 {
 
 	if addr < 0x2000 {
 		// Address relative to the 8KB window ($0000-$1FFF)
-		// The correct bank data is handled by copyBanks()
 		return addr & 0x1FFF
 	}
 
@@ -289,12 +281,11 @@ func (m *MMC3) MapPPU(addr uint16) uint16 {
 func (m *MMC3) Write(addr uint16, value byte) {
 	// Handle PRG RAM Writes ($6000-$7FFF)
 	if addr >= 0x6000 && addr <= 0x7FFF {
-		m.mutex.RLock() // Check state with read lock first
+		m.mutex.RLock() 
 		canWrite := m.state.hasSRAM && m.state.prgRAMEnabled && !m.state.prgRAMWriteProtect
 		m.mutex.RUnlock()
 
 		if canWrite {
-			// No lock needed for WriteSRAM itself if Cartridge handles its own sync
 			m.cart.WriteSRAM(addr&0x1FFF, value)
 		}
 		return
@@ -317,25 +308,20 @@ func (m *MMC3) Write(addr uint16, value byte) {
 		if addr%2 == 0 { // Bank Select ($8000, $8002, ...)
 			if m.state.bankSelect != value {
 				m.state.bankSelect = value
-				// Bank mode bits might have changed, potentially requires bank update
 				needsBankUpdate = true
 			}
 		} else { // Bank Data ($8001, $8003, ...)
 			regIndex := m.state.bankSelect & 0x07
 			maskedValue := value
-			// CHR banks R0/R1 are 2KB aligned, ignore low bit when used for 2KB banks
-			if regIndex < 2 {
-				// No explicit masking here, but updateBanks needs to handle it
-				// Masking applied during offset calculation in updateBanks
-			}
-			// PRG banks R6/R7 have fewer bits (typically 6 for 512KB PRG max -> mask to 0x3F?)
+			
+			// PRG banks R6/R7 have fewer bits
 			if regIndex == 6 || regIndex == 7 {
 				maskedValue &= 0x3F // Mask PRG banks to 6 bits (supports up to 512KB)
 			}
 
 			if m.state.bankRegisters[regIndex] != maskedValue {
 				m.state.bankRegisters[regIndex] = maskedValue
-				needsBankUpdate = true // Bank content changed
+				needsBankUpdate = true 
 			}
 		}
 
@@ -349,8 +335,6 @@ func (m *MMC3) Write(addr uint16, value byte) {
 		} else { // PRG RAM Protect ($A001, $A003, ...)
 			newEnable := (value & 0x80) == 0
 			newWriteProtect := (value & 0x40) != 0
-			// Update state only if it changes to avoid unnecessary bank updates?
-			// No bank update needed here, just state change for $6000-$7FFF writes.
 			m.state.prgRAMEnabled = newEnable
 			m.state.prgRAMWriteProtect = newWriteProtect
 		}
@@ -359,18 +343,16 @@ func (m *MMC3) Write(addr uint16, value byte) {
 		if addr%2 == 0 { // IRQ Latch ($C000, $C002, ...)
 			m.state.irqLatch = value
 		} else { // IRQ Reload ($C001, $C003, ...)
-			m.state.irqCounter = 0 // Reset counter immediately? NESdev wiki suggests yes.
+			m.state.irqCounter = 0 
 			m.state.irqReload = true
 		}
 
 	case addr >= 0xE000 && addr <= 0xFFFF: // IRQ Disable / IRQ Enable
 		if addr%2 == 0 { // IRQ Disable ($E000, $E002, ...)
 			m.state.irqEnabled = false
-			m.state.irqPending = false // Disabling also clears any pending interrupt signal
+			m.state.irqPending = false 
 		} else { // IRQ Enable ($E001, $E003, ...)
 			m.state.irqEnabled = true
-			// Acknowledging does NOT clear irqPending here, CPU reading $4015 does on some mappers, but MMC3 IRQ is different.
-			// Let's assume enabling doesn't clear pending. The CPU must handle the IRQ.
 		}
 	}
 
@@ -385,30 +367,27 @@ func (m *MMC3) Write(addr uint16, value byte) {
 }
 
 // ClockIRQCounter simulates the MMC3 IRQ counter clocking mechanism.
-// This should be called by the PPU, typically when A12 rises during rendering.
-// A common approximation is to call it once per scanline end or similar PPU event.
+// Called by the PPU, typically when A12 rises during rendering.
 func (m *MMC3) ClockIRQCounter() {
-	m.mutex.Lock() // Exclusive lock to modify IRQ state
+	m.mutex.Lock() 
 	defer m.mutex.Unlock()
 
 	if m.state.irqReload {
-		m.state.irqCounter = m.state.irqLatch // Reload counter
-		m.state.irqReload = false             // Clear reload flag
+		m.state.irqCounter = m.state.irqLatch 
+		m.state.irqReload = false            
 	} else if m.state.irqCounter > 0 {
-		m.state.irqCounter-- // Decrement counter
+		m.state.irqCounter-- 
 	}
 
 	// If counter is zero after decrement/reload, and IRQs are enabled, trigger pending flag
 	if m.state.irqCounter == 0 && m.state.irqEnabled {
 		m.state.irqPending = true
-		// Note: The pending flag stays true until IRQs are disabled ($E000)
-		// or potentially reset. The CPU needs to see this flag via IRQState().
 	}
 }
 
 // IRQState returns true if the mapper is currently asserting the IRQ line.
 func (m *MMC3) IRQState() bool {
-	m.mutex.RLock() // Read lock sufficient
+	m.mutex.RLock() 
 	defer m.mutex.RUnlock()
 	return m.state.irqPending
 }
