@@ -3,12 +3,12 @@ package channels
 
 // EnvelopeUnit represents the volume envelope generator used by Pulse and Noise channels.
 type EnvelopeUnit struct {
-	start          bool // Flag to indicate the envelope should restart
-	loop           bool // Flag to loop the envelope decay (also length counter halt)
-	constant       bool // Flag to use constant volume instead of decay envelope
-	dividerPeriod  byte // Reload value for the divider (also the constant volume level) (0-15)
+	start          bool // Flag to restart the envelope
+	loop           bool // Flag to loop the envelope decay
+	constant       bool // Flag for constant volume mode
+	dividerPeriod  byte // Reload value for divider (0-15)
 	dividerCounter byte // Counts down from dividerPeriod
-	decayLevel     byte // Current decay level (volume) (0-15)
+	decayLevel     byte // Current volume level (0-15)
 }
 
 // Reset initializes the envelope unit to its power-up state.
@@ -21,13 +21,13 @@ func (e *EnvelopeUnit) Reset() {
 	e.decayLevel = 0
 }
 
-// Clock advances the envelope unit's state. Called by the frame counter.
+// Clock advances the envelope unit's state.
 func (e *EnvelopeUnit) Clock() {
 	// Check if envelope needs restarting
 	if e.start {
-		e.start = false      // Clear start flag
-		e.decayLevel = 15    // Reset decay level to maximum
-		e.dividerCounter = e.dividerPeriod // Reload divider counter
+		e.start = false
+		e.decayLevel = 15
+		e.dividerCounter = e.dividerPeriod
 		return
 	}
 
@@ -35,25 +35,22 @@ func (e *EnvelopeUnit) Clock() {
 	if e.dividerCounter > 0 {
 		e.dividerCounter--
 	} else {
-		// Divider reached zero, reload it
+		// Reload divider when it reaches zero
 		e.dividerCounter = e.dividerPeriod
 
-		// Clock the decay level counter
+		// Update decay level
 		if e.decayLevel > 0 {
-			e.decayLevel-- // Decrease volume level
-		} else if e.loop { // If decay level is 0 and loop flag is set...
-			e.decayLevel = 15 // ...wrap around to maximum volume
+			e.decayLevel--
+		} else if e.loop {
+			e.decayLevel = 15
 		}
 	}
 }
 
-// --- Getters (Not strictly necessary but can be useful) ---
-
-// Volume returns the current output volume of the envelope (0-15).
-// Takes into account constant volume mode.
+// Volume returns the current output volume (0-15)
 func (e *EnvelopeUnit) Volume() byte {
 	if e.constant {
-		return e.dividerPeriod // Use constant volume level
+		return e.dividerPeriod
 	}
-	return e.decayLevel // Use current decay level
+	return e.decayLevel
 }
