@@ -1,104 +1,90 @@
 // File: apu/mixer.go
 package apu
 
-import (
-	"math" // Needed for math.Tanh
-)
-
-// Mixer handles combining the audio channel outputs and applying final processing.
+// Mixer handles combining the audio channel outputs using canonical non-linear formulas.
 type Mixer struct {
-	// --- Configuration ---
+	// Configuration
+	masterVolume float32 // Master volume control (typically 0.0 to 1.0)
 
-	// Master Volume Control (Applied before clipping)
-	masterVolume float32
-
-	// Scaling factors based roughly on common linear approximations, adjusted for balance.
-	// These determine the relative contribution of each channel *before* master volume.
-	// Goal: Avoid clipping *most* of the time with typical game audio at masterVolume = 1.0
-	pulseScale    float32
-	triangleScale float32
-	noiseScale    float32
-	// dmcScale      float32 // Reserved for future Delta Modulation Channel
-
-	// Soft Clipping Strength (Higher value -> harder clipping near limits)
-	// A value around 1.0 to 3.0 is typical. 1.0 gives a gentle curve.
-	softClipFactor float32
-
-	// DC Blocking Filter configuration (removes constant offset)
+	// DC Blocking Filter configuration
 	// Alpha close to 1.0 means slow adaptation (less low-frequency filtering).
 	// Value around 0.995 is common.
 	dcBlockingAlpha float32
 
-	// --- State ---
+	// State
 	dcOffset float32 // Running average of the signal for DC blocking
 }
 
-// NewMixer creates and initializes a mixer with refined settings.
+// NewMixer creates and initializes a mixer with canonical settings.
 func NewMixer() *Mixer {
 	return &Mixer{
-		// Configuration: These values can be tuned further based on testing.
-		masterVolume: 1.0, // Start at full volume
-
-		// Adjusted scaling factors - Aim for slightly lower levels than before
-		// to give headroom before hitting the soft clipper frequently.
-		// Relative balance: Triangle often perceived loudest, Noise quietest.
-		pulseScale:    0.09, // Was 0.15
-		triangleScale: 0.14, // Was 0.20
-		noiseScale:    0.07, // Was 0.10
-		// dmcScale:     0.08, // Placeholder for future DMC
-
-		softClipFactor: 1.5,   // Moderate soft clipping curve
+		// Configuration:
+		masterVolume:    1.0,   // Start at full volume. Adjust down slightly (e.g., 0.9) if clipping occurs.
 		dcBlockingAlpha: 0.995, // Standard DC blocking coefficient
 
-		// State
+		// State:
 		dcOffset: 0.0, // Initialize DC offset estimate
 	}
 }
 
-// MixChannels combines the outputs of the individual APU channels.
-// Inputs (pulse1, pulse2, triangle, noise, dmc) should be normalized (e.g., 0.0 to 1.0).
-func (m *Mixer) MixChannels(pulse1, pulse2, triangle, noise, dmc float32) float32 {
-	// 1. Apply individual scaling factors
-	// Note: Pulse channels combine linearly before contributing
-	pulseSum := (pulse1 + pulse2) * m.pulseScale
-	triangleOut := triangle * m.triangleScale
-	noiseOut := noise * m.noiseScale
-	// dmcOut := dmc * m.dmcScale // Reserved for future DMC implementation
+// MixChannels combines the outputs of the individual APU channels using non-linear formulas.
+// Inputs (p1, p2, tri, noise, dmc) should be normalized floats (0.0 to 1.0).
+// DMC input corresponds to its 0-127 level normalized to 0.0-1.0.
+func (m *Mixer) MixChannels(p1, p2, tri, noise, dmc float32) float32 {
 
-	// 2. Sum the scaled channel outputs
-	// This is a linear mix. Real NES hardware is non-linear, but this is a common approximation.
-	mix := pulseSum + triangleOut + noiseOut // + dmcOut
-
-	// 3. Apply DC Blocking Filter (High-pass filter)
-	// Removes unwanted constant voltage offset that can cause clicks on start/stop.
-	// Calculation: y[n] = x[n] - x[n-1] + alpha * y[n-1] (common form)
-	// Simplified IIR: offset = offset*alpha + mix*(1-alpha); output = mix - offset
-	m.dcOffset = m.dcOffset*m.dcBlockingAlpha + mix*(1.0-m.dcBlockingAlpha)
-	mix = mix - m.dcOffset
-
-	// 4. Apply Master Volume
-	mix *= m.masterVolume
-
-	// 5. Apply Soft Clipping using Hyperbolic Tangent (tanh)
-	// tanh maps the input range (-inf, +inf) to (-1.0, 1.0) smoothly.
-	// The softClipFactor scales the input to control how quickly it saturates.
-	// We use float64 for math.Tanh as it's often faster/more standard.
-	mix = float32(math.Tanh(float64(mix * m.softClipFactor)))
-
-	// 6. Final safety clamp (optional, tanh should keep it within [-1, 1])
-	// mix = clamp(mix, -1.0, 1.0) // Usually not needed after tanh
-
-	return mix
-}
-
-// clamp ensures a value stays within the specified minimum and maximum bounds.
-// (Keeping this utility function in case it's needed elsewhere or for hard clipping option)
-func clamp(value, min, max float32) float32 {
-	if value < min {
-		return min
+	// Calculate Non-linear Pulse Mix
+	// Use float64 for intermediate calculations to preserve precision.
+	pulseSum := float64(p1 + p2) // Max value 2.0
+	var pulseOut float64
+	if pulseSum > 1e-9 { // Epsilon check to avoid division by zero / instability
+		// Original formula: 95.88 / (8128 / (P1 + P2) + 100)
+		// Adapted for normalized inputs p1, p2 (where P1=15*p1, P2=15*p2):
+		// Denominator = 8128 / (15 * (p1 + p2)) + 100 = (8128/15) / (p1+p2) + 100
+		// Constant = 8128.0 / 15.0 = 541.8666...
+		pulseOut = 95.88 / ((541.8666666666667 / pulseSum) + 100.0)
 	}
-	if value > max {
-		return max
+
+	// Calculate Non-linear Triangle/Noise/DMC Mix
+	// Inputs tri, noise are 0.0-1.0 (from 0-15). Input dmc is 0.0-1.0 (from 0-127).
+	var tndOut float64
+	// Original: 1 / (T/8227 + N/12241 + D/22638)
+	// Adapted: 1 / ( (15*tri)/8227 + (15*noise)/12241 + (127*dmc)/22638 )
+	// T_Term = tri / (8227/15) = tri / 548.4666...
+	// N_Term = noise / (12241/15) = noise / 816.0666...
+	// D_Term = dmc / (22638/127) = dmc / 178.2519...
+	tTerm := float64(tri) / 548.4666666666667
+	nTerm := float64(noise) / 816.0666666666667
+	dTerm := float64(dmc) / 178.251968503937 // DMC placeholder term
+
+	tndDenominatorSum := tTerm + nTerm + dTerm
+
+	if tndDenominatorSum > 1e-9 { // Epsilon check
+		// Original formula: 159.79 / (1 / TND_Sum + 100)
+		tndOut = 159.79 / ((1.0 / tndDenominatorSum) + 100.0)
 	}
-	return value
+
+	// Combine Mixes
+	// The final mix is a simple sum of the two mixer outputs.
+	mixRaw := float32(pulseOut + tndOut) // Convert back to float32
+
+	// Apply DC Blocking Filter (High-pass filter)
+	// This remains the same, prevents DC offset buildup.
+	m.dcOffset = m.dcOffset*m.dcBlockingAlpha + mixRaw*(1.0-m.dcBlockingAlpha)
+	mixFiltered := mixRaw - m.dcOffset
+
+	// Apply Master Volume
+	mixFinal := mixFiltered * m.masterVolume
+
+	// Optional: Hard Clipping
+	// The non-linear formulas should prevent most clipping, but this is a safety measure.
+	// Enable if needed for problematic ROMs or if masterVolume > 1 is used.
+	/*
+	   if mixFinal > 1.0 {
+	       mixFinal = 1.0
+	   } else if mixFinal < -1.0 {
+	       mixFinal = -1.0
+	   }
+	*/
+
+	return mixFinal
 }
