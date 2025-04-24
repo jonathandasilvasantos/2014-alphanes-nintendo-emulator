@@ -63,12 +63,14 @@ type APU struct {
 }
 
 // NewAPU creates and initializes a new APU instance with the lock-free buffer.
+// NewAPU creates and initializes a new APU instance with the lock-free buffer.
 func NewAPU() (*APU, error) {
 	log.Println("Initializing APU with Lock-Free Ring Buffer...")
 
 	apu := &APU{
-		pulse1:     channels.NewPulseChannel(1),
-		pulse2:     channels.NewPulseChannel(2),
+		// Pass CpuClockSpeed and SampleRate to NewPulseChannel
+		pulse1:     channels.NewPulseChannel(1, CpuClockSpeed, float64(SampleRate)),
+		pulse2:     channels.NewPulseChannel(2, CpuClockSpeed, float64(SampleRate)),
 		triangle:   channels.NewTriangleChannel(),
 		noise:      channels.NewNoiseChannel(),
 		mixer:      NewMixer(),
@@ -80,11 +82,15 @@ func NewAPU() (*APU, error) {
 		}{
 			lastReport: time.Now(),
 		},
+		// Initialize timing counters
+		sampleGenCycles:    0.0,
+		frameCounterCycles: 0.0,
+		previousSample:     0.0,
 	}
 
 	// Initialize APU registers to documented power-on values
 	apu.regMu.Lock()
-	apu.writeRegisterInternal(0x4017, 0x00)
+	apu.writeRegisterInternal(0x4017, 0x00) // Write to frame counter control
 	apu.regMu.Unlock()
 
 	// Ensure channels start in their reset state
@@ -101,15 +107,15 @@ func NewAPU() (*APU, error) {
 
 	// Open Default Audio Stream
 	stream, err := portaudio.OpenDefaultStream(
-		0,
-		1,
-		SampleRate,
+		0, // no input channels
+		1, // mono output
+		float64(SampleRate),
 		BufferSizeSamples,
 		apu.audioCallback,
 	)
 	if err != nil {
 		log.Printf("PortAudio Open Stream Error: %v", err)
-		portaudio.Terminate()
+		portaudio.Terminate() // Clean up portaudio
 		return nil, err
 	}
 	apu.stream = stream
@@ -126,7 +132,6 @@ func NewAPU() (*APU, error) {
 	log.Println("APU Initialization Complete.")
 	return apu, nil
 }
-
 // audioCallback is called by PortAudio when it needs more audio data.
 func (apu *APU) audioCallback(out []float32) {
 	rb := apu.ring
