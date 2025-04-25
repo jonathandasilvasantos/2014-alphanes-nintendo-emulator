@@ -26,62 +26,52 @@ func L(value uint16) byte {
 	return byte( (value << 8) >> 8 )
 }
 
+// ReadBit remains as is for compatibility if used elsewhere,
+// but its internal usage by BitN can be optimized away.
 func  ReadBit(input byte, pos byte) byte {
+	// Original implementation kept for direct callers.
 	return (input << pos) >> 7
 }
 
-func  Bit0(input byte) byte {
-	return ReadBit(input, 7)
+// Optimized BitN functions using direct shift and mask.
+// Assumes N in BitN refers to the bit index (0=LSB, 7=MSB).
+
+// Bit0 returns the value of bit 0 (Least Significant Bit).
+func Bit0(input byte) byte {
+	return input & 1 // More direct: (input >> 0) & 1
 }
 
+// Bit1 returns the value of bit 1.
 func Bit1(input byte) byte {
-	return ReadBit(input, 6)
+	return (input >> 1) & 1
 }
 
+// Bit2 returns the value of bit 2.
 func Bit2(input byte) byte {
-	return ReadBit(input, 5)
+	return (input >> 2) & 1
 }
 
+// Bit3 returns the value of bit 3.
 func Bit3(input byte) byte {
-	return ReadBit(input, 4)
+	return (input >> 3) & 1
 }
 
+// Bit4 returns the value of bit 4.
 func Bit4(input byte) byte {
-	return ReadBit(input, 3)
+	return (input >> 4) & 1
 }
 
+// Bit5 returns the value of bit 5.
 func Bit5(input byte) byte {
-	return ReadBit(input, 2)
+	return (input >> 5) & 1
 }
 
+// Bit6 returns the value of bit 6.
 func Bit6(input byte) byte {
-	return ReadBit(input, 1)
+	return (input >> 6) & 1
 }
 
+// Bit7 returns the value of bit 7 (Most Significant Bit).
 func Bit7(input byte) byte {
-	return ReadBit(input, 0)
-}
-
-/*func SetBit(input *byte, pos byte, value byte ) {
-	if value == 1 {
-		*input |= 1 << pos
-	} else {
-		*input &= ^(1 << pos)
-	}
-}
-*/
-func SetBit(input byte, pos byte, value byte ) byte {
-	var b byte = input
-	if value == 1 {
-		b |= 1 << pos
-	} else {
-		b &= ^(1 << pos)
-	}
-	return b
-}
-
-func LE(a byte, b byte) uint16 {
-	var x uint16 = uint16(a)
-	var y uint16 = uint16(b)
-	return (y << 8) | x	
+	return (input >> 7) & 1
 }
