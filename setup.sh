@@ -1,3 +1,7 @@
-# Set GOPATH and disable modules
-export GOPATH=/Volumes/extra/projects/2014-alphanes-nintendo-emulator
+#!/bin/bash
+
+# Set GOPATH to current directory automatically
+export GOPATH=$(pwd)
 export GO111MODULE=off
+
+echo "GOPATH set to: $GOPATH"
