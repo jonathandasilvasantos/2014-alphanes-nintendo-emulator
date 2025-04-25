@@ -1,5 +1,5 @@
 /*
-Copyright 2014, 2015 Jonathan da Silva SAntos
+Copyright 2014‑2025 Jonathan da Silva Santos
 
 This file is part of Alphanes.
 
@@ -17,95 +17,89 @@ This file is part of Alphanes.
     along with Alphanes.  If not, see <http://www.gnu.org/licenses/>.
 */
 package cpu
+
 import "zerojnt/cartridge"
 
-// Relative
+// -----------------------------------------
+// Addressing‑mode helpers for the 6502 core
+// -----------------------------------------
+// Todas retornam o endereço *efetivo* que a UCP acessará.  Para modos que
+// podem cruzar páginas (AbsX/Y, IndY) a flag cpu.PageCrossed é ajustada –
+// isto deve ser verificado pelo chamador para cobrar o ciclo extra.
+// -----------------------------------------
+
+// Rel — deslocamento relativo signed (+127/‑128) usado pelas instruções de branch.
 func Rel(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-        reladdr := RM(cpu, cart, cpu.PC+1)
-        addr := int8(reladdr)
-        return uint16(addr) + uint16(cpu.PC+2)
+    off := int8(RM(cpu, cart, cpu.PC+1))                  // deslocamento assinado
+    return uint16(int32(cpu.PC) + 2 + int32(off))         // PC já aponta para o opcode
 }
 
-// Immediate
+// Imm — operando imediato (retorna como uint16 para reutilização).
 func Imm(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-	return uint16(RM(cpu, cart, cpu.PC+1))
+    return uint16(RM(cpu, cart, cpu.PC+1))
 }
 
-// Absolute
+// Abs — endereço de 16 bits na própria instrução.
 func Abs(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-        var lo, hi byte
-        lo = RM(cpu, cart, cpu.PC+1)
-        hi = RM(cpu, cart, cpu.PC+2)
-        return  (uint16(hi) << 8) | uint16(lo)
+    lo := RM(cpu, cart, cpu.PC+1)
+    hi := RM(cpu, cart, cpu.PC+2)
+    return (uint16(hi) << 8) | uint16(lo)
 }
 
-// Absolute-X
+// AbsX — endereço absoluto indexado por X, com detecção de page‑cross.
 func AbsX(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-	return uint16(Abs(cpu, cart)+ uint16(cpu.X))
+    base := Abs(cpu, cart)
+    addr := base + uint16(cpu.X)
+    cpu.PageCrossed = BoolToByte(H(base) != H(addr))
+    return addr
 }
 
-// Absolute-Y
+// AbsY — endereço absoluto indexado por Y.
 func AbsY(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-	return uint16(Abs(cpu, cart)+ uint16(cpu.Y))
+    base := Abs(cpu, cart)
+    addr := base + uint16(cpu.Y)
+    cpu.PageCrossed = BoolToByte(H(base) != H(addr))
+    return addr
 }
 
-// Zero Page
+// Zp — zero‑page direto (cara a cara com o operando).
 func Zp(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-        return uint16(  RM(cpu, cart, cpu.PC+1))
+    return uint16(RM(cpu, cart, cpu.PC+1))
 }
 
-// Zero Page-X
+// ZpX — zero‑page indexado por X (wrap 0x00‑0xFF).
 func ZpX(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-        return uint16(  RM(cpu, cart, cpu.PC+1) + cpu.X )
-	//return LE(RM(cpu, cart, cpu.PC+1) + cpu.X, 0)
+    return uint16((RM(cpu, cart, cpu.PC+1) + cpu.X) & 0xFF)
 }
 
-// Zero Page-Y
+// ZpY — zero‑page indexado por Y.
 func ZpY(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    return uint16(  RM(cpu, cart, cpu.PC+1) + cpu.Y )
+    return uint16((RM(cpu, cart, cpu.PC+1) + cpu.Y) & 0xFF)
 }
 
-
-
-// Indirect - Just used in JMP.
+// Ind — modo indireto (somente em JMP).  Implementa o bug de page‑wrap do 6502.
 func Ind(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-
-	var a uint16 = uint16 ( LE( RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2)))
-	var l byte = RM(cpu, cart, a)
-	var h byte = RM(cpu, cart, a+1)
-	if L(a) == 0xFF {
-		h = RM(cpu, cart, a-0xFF)
-	}
-	return LE(l, h)
+    ptr := Abs(cpu, cart)                                 // endereço do ponteiro HHLL
+    lo := RM(cpu, cart, ptr)
+    hi := RM(cpu, cart, (ptr&0xFF00)|uint16((ptr+1)&0x00FF)) // wrap em 0xXXFF→0xXX00
+    return LE(lo, hi)
 }
 
-// Indirect Indexed (Pos-indexed)
+// IndX — (d,X)   pós‑indexado pelo registrador X, *antes* de formar o par de bytes.
 func IndX(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-	var res uint16 = uint16 ( LE( RM(cpu, cart, cpu.PC+1), 0)) + uint16(cpu.X)
-	
-	var l byte = RM(cpu, cart, res & 0xFF   )
-	var h byte = RM(cpu, cart, (res+1) & 0xFF  )
-	var target uint16 = LE(l,h)
-
-	return target
+    zp := (RM(cpu, cart, cpu.PC+1) + cpu.X) & 0xFF         // wrap na zero‑page
+    lo := RM(cpu, cart, uint16(zp))
+    hi := RM(cpu, cart, uint16((zp+1)&0xFF))
+    return LE(lo, hi)
 }
 
-// Indexed Indirect (Pre-indexed)
+// IndY — (d),Y  pré‑indexado: ponteiro lido, soma Y, marca page‑cross.
 func IndY(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-	var res uint16 = uint16 ( LE( RM(cpu, cart, cpu.PC+1), 0)) 
-	
-	var l byte = RM(cpu, cart, res & 0xFF   )
-	var h byte = RM(cpu, cart, (res+1) & 0xFF  )
-	var target uint16 = LE(l,h)
-	
-
-	
-	var query uint16 = target 
-	var indexed uint16 = query + uint16(cpu.Y)
-	cpu.PageCrossed = 0
-	if H(query) !=  H(indexed) {
-		cpu.PageCrossed = 1
-	}
-
-	return indexed
+    zp := RM(cpu, cart, cpu.PC+1)
+    lo := RM(cpu, cart, uint16(zp))
+    hi := RM(cpu, cart, uint16((zp+1)&0xFF))
+    base := LE(lo, hi)
+    addr := base + uint16(cpu.Y)
+    cpu.PageCrossed = BoolToByte(H(base) != H(addr))
+    return addr
 }

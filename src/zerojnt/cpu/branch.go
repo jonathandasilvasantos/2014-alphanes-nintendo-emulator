@@ -1,27 +1,25 @@
-/*
-Copyright 2014, 2015 Jonathan da Silva SAntos
 
-This file is part of Alphanes.
-
-    Alphanes is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    Alphanes is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with Alphanes.  If not, see <http://www.gnu.org/licenses/>.
-*/
 package cpu
 
-func Branch(cpu *CPU, value uint16) {
+// Branch applies the 6502 branching rules:
+//   • +1 cycle when the branch is taken.
+//   • +1 additional cycle if the branch destination crosses a page
+//     boundary (i.e. the high‑order byte changes).
+// The caller is expected to have preset cpu.CYCSpecial to 0 before the
+// call.  The helper updates CYCSpecial with the correct penalty and
+// finally sets the program counter to the destination address.
+func Branch(cpu *CPU, target uint16) {
+    // Cycle penalty for a taken branch (always +1).
+    cpu.CYCSpecial++
 
-    if (cpu.PC & 0xFF00) != (cpu.PC & 0xFF00) {
-	cpu.CYCSpecial+=2
-    } else { cpu.CYCSpecial++ }
-    cpu.PC = value
+    // Reference PC after the operand byte has been fetched (PC+2).
+    oldPC := cpu.PC + 2
+
+    // Extra cycle if destination is on a different 256‑byte page.
+    if (oldPC & 0xFF00) != (target & 0xFF00) {
+        cpu.CYCSpecial++
+    }
+
+    // Jump to the computed target address.
+    cpu.PC = target
 }
