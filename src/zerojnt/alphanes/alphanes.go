@@ -1,4 +1,4 @@
-/*
+/* 
 Copyright 2014, 2015 Jonathan da Silva Santos
 
 This file is part of Alphanes.
@@ -28,8 +28,10 @@ import (
 	"zerojnt/cartridge"
 	"zerojnt/cpu"
 	"zerojnt/debug"
+	"zerojnt/input"
 	"zerojnt/ioports"
 	"zerojnt/ppu"
+	"github.com/veandco/go-sdl2/sdl" // Still needed for PPU struct definition
 )
 
 const (
@@ -64,6 +66,7 @@ var (
 	Nescpu   cpu.CPU
 	Nesppu   *ppu.PPU
 	Nesio    ioports.IOPorts
+	NesInput *input.InputHandler
 	Debug    debug.Debug
 	PPUDebug debug.PPUDebug
 	Alphanes Emulator
@@ -138,6 +141,8 @@ func initializeEmulator() {
 	// Link PPU to CPU
 	Nescpu.SetPPU(Nesppu)
 
+	NesInput = input.NewInputHandler(Nesppu.IO)
+
 	// Initialize emulator state
 	Alphanes = Emulator{
 		Running:    true,
@@ -187,6 +192,33 @@ func emulate() {
 	
 	// Main emulation loop
 	for Alphanes.Running && Nescpu.Running {
+
+		sdl.PumpEvents()
+		// Drain up to 32 events per call
+		for processed := 0; processed < 6; processed++ {
+			currentEvent := sdl.PollEvent()
+			if currentEvent == nil {
+				break
+			}
+
+			NesInput.HandleEvent(currentEvent)
+
+			switch e := currentEvent.(type) {
+			case sdl.KeyboardEvent:
+				keyName := sdl.GetKeyName(e.Keysym.Sym)
+				isPressed := (e.State == sdl.PRESSED)
+
+
+				if keyName == "Escape" && isPressed {
+					fmt.Printf("DEBUG: Escape key pressed, quitting application\n")
+					return
+				}
+
+
+			}
+		}
+
+
 		if !Alphanes.Paused {
 			// Process a batch of CPU cycles
 			batchSize := ppuBatchSize
@@ -226,7 +258,7 @@ func emulate() {
 				
 				// Process input once per frame for better performance
 				if Nesppu != nil {
-					Nesppu.CheckKeyboard()
+					////Nesppu.CheckKeyboard()
 				}
 				
 				cyclesThisFrame = 0
@@ -250,10 +282,6 @@ func emulate() {
 				}
 			}
 		} else {
-			// When paused, just check for input occasionally and sleep to avoid CPU usage
-			if Nesppu != nil {
-				Nesppu.CheckKeyboard()
-			}
 			
 			// Consume any frame ticks while paused
 			select {
