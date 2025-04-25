@@ -193,32 +193,6 @@ func emulate() {
 	// Main emulation loop
 	for Alphanes.Running && Nescpu.Running {
 
-		sdl.PumpEvents()
-		// Drain up to 32 events per call
-		for processed := 0; processed < 6; processed++ {
-			currentEvent := sdl.PollEvent()
-			if currentEvent == nil {
-				break
-			}
-
-			NesInput.HandleEvent(currentEvent)
-
-			switch e := currentEvent.(type) {
-			case sdl.KeyboardEvent:
-				keyName := sdl.GetKeyName(e.Keysym.Sym)
-				isPressed := (e.State == sdl.PRESSED)
-
-
-				if keyName == "Escape" && isPressed {
-					fmt.Printf("DEBUG: Escape key pressed, quitting application\n")
-					return
-				}
-
-
-			}
-		}
-
-
 		if !Alphanes.Paused {
 			// Process a batch of CPU cycles
 			batchSize := ppuBatchSize
@@ -230,8 +204,13 @@ func emulate() {
 			if batchSize > 0 {
 				// Process CPU and PPU cycles in a single optimized batch
 				for i := 0; i < batchSize; i++ {
+					
+					// CHECK FOR KEYBOARD INPUT.
+					
+					
 					// Execute one CPU cycle
 					cpu.Process(&Nescpu, Cart)
+				
 					
 					// Execute PPU cycles (3 per CPU cycle)
 					for j := 0; j < ppuCyclesPerCpuCycle; j++ {
@@ -255,11 +234,32 @@ func emulate() {
 			if cyclesThisFrame >= cpuCyclesPerFrame {
 				// Wait for the next frame tick for consistent timing
 				<-frameTicker.C
-				
-				// Process input once per frame for better performance
-				if Nesppu != nil {
-					////Nesppu.CheckKeyboard()
+
+				sdl.PumpEvents()
+				for processed := 0; processed < 6; processed++ {
+					currentEvent := sdl.PollEvent()
+					if currentEvent == nil {
+						break
+					}
+		
+					NesInput.HandleEvent(currentEvent)
+		
+					switch e := currentEvent.(type) {
+					case sdl.KeyboardEvent:
+						keyName := sdl.GetKeyName(e.Keysym.Sym)
+						isPressed := (e.State == sdl.PRESSED)
+		
+		
+						if keyName == "Escape" && isPressed {
+							fmt.Printf("DEBUG: Escape key pressed, quitting application\n")
+							return
+						}
+		
+		
+					}
 				}
+		
+			
 				
 				cyclesThisFrame = 0
 				frameCount++
