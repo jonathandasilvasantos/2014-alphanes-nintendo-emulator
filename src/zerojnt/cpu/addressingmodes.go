@@ -1,105 +1,88 @@
-/*
-Copyright 2014‑2025 Jonathan da Silva Santos
-
-This file is part of Alphanes.
-
-    Alphanes is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    Alphanes is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with Alphanes.  If not, see <http://www.gnu.org/licenses/>.
-*/
 package cpu
 
 import "zerojnt/cartridge"
 
-// -----------------------------------------
-// Addressing‑mode helpers for the 6502 core
-// -----------------------------------------
-// Todas retornam o endereço *efetivo* que a UCP acessará.  Para modos que
-// podem cruzar páginas (AbsX/Y, IndY) a flag cpu.PageCrossed é ajustada –
-// isto deve ser verificado pelo chamador para cobrar o ciclo extra.
-// -----------------------------------------
+// Addressing mode helpers for the 6502 core
+// All functions return the effective address to be accessed by the CPU
+// For modes that can cross pages (AbsX, AbsY, IndY), the cpu.PageCrossed flag is set
+// Zero-page and pointers always wrap around within the 8 least significant bits
 
-// Rel — deslocamento relativo signed (+127/‑128) usado pelas instruções de branch.
+// Rel - 8-bit signed relative offset used by branch instructions
+// Target = (PC + 2) + offset, where PC points to opcode
 func Rel(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    off := int8(RM(cpu, cart, cpu.PC+1))                  // deslocamento assinado
-    return uint16(int32(cpu.PC) + 2 + int32(off))         // PC já aponta para o opcode
+	off := int8(RM(cpu, cart, cpu.PC+1)) // -128 to +127
+	base := cpu.PC + 2                   // next instruction
+	return base + uint16(int16(off))     // add with sign-extend and 16-bit wrap
 }
 
-// Imm — operando imediato (retorna como uint16 para reutilização).
+// Imm - immediate mode (returns as uint16 for generic reuse)
 func Imm(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    return uint16(RM(cpu, cart, cpu.PC+1))
+	return uint16(RM(cpu, cart, cpu.PC+1))
 }
 
-// Abs — endereço de 16 bits na própria instrução.
+// Abs - 16-bit address embedded in instruction
 func Abs(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    lo := RM(cpu, cart, cpu.PC+1)
-    hi := RM(cpu, cart, cpu.PC+2)
-    return (uint16(hi) << 8) | uint16(lo)
+	lo := RM(cpu, cart, cpu.PC+1)
+	hi := RM(cpu, cart, cpu.PC+2)
+	return (uint16(hi) << 8) | uint16(lo)
 }
 
-// AbsX — endereço absoluto indexado por X, com detecção de page‑cross.
+// AbsX - absolute indexed by X; marks page-cross if crossing boundary
 func AbsX(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    base := Abs(cpu, cart)
-    addr := base + uint16(cpu.X)
-    cpu.PageCrossed = BoolToByte(H(base) != H(addr))
-    return addr
+	base := Abs(cpu, cart)
+	addr := base + uint16(cpu.X)
+	cpu.PageCrossed = BoolToByte(H(base) != H(addr))
+	return addr
 }
 
-// AbsY — endereço absoluto indexado por Y.
+// AbsY - absolute indexed by Y
 func AbsY(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    base := Abs(cpu, cart)
-    addr := base + uint16(cpu.Y)
-    cpu.PageCrossed = BoolToByte(H(base) != H(addr))
-    return addr
+	base := Abs(cpu, cart)
+	addr := base + uint16(cpu.Y)
+	cpu.PageCrossed = BoolToByte(H(base) != H(addr))
+	return addr
 }
 
-// Zp — zero‑page direto (cara a cara com o operando).
+// Zp - direct zero-page
 func Zp(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    return uint16(RM(cpu, cart, cpu.PC+1))
+	return uint16(RM(cpu, cart, cpu.PC+1))
 }
 
-// ZpX — zero‑page indexado por X (wrap 0x00‑0xFF).
+// ZpX - zero-page indexed by X (wrap 0x00-0xFF)
 func ZpX(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    return uint16((RM(cpu, cart, cpu.PC+1) + cpu.X) & 0xFF)
+	return uint16((RM(cpu, cart, cpu.PC+1) + cpu.X) & 0xFF)
 }
 
-// ZpY — zero‑page indexado por Y.
+// ZpY - zero-page indexed by Y
 func ZpY(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    return uint16((RM(cpu, cart, cpu.PC+1) + cpu.Y) & 0xFF)
+	return uint16((RM(cpu, cart, cpu.PC+1) + cpu.Y) & 0xFF)
 }
 
-// Ind — modo indireto (somente em JMP).  Implementa o bug de page‑wrap do 6502.
+// Ind - indirect mode used only by JMP
+// Implements the page-wrap "bug": if pointer is at 0xXXFF,
+// hi-byte comes from 0xXX00 (not 0x(X+1)00)
 func Ind(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    ptr := Abs(cpu, cart)                                 // endereço do ponteiro HHLL
-    lo := RM(cpu, cart, ptr)
-    hi := RM(cpu, cart, (ptr&0xFF00)|uint16((ptr+1)&0x00FF)) // wrap em 0xXXFF→0xXX00
-    return LE(lo, hi)
+	ptr := Abs(cpu, cart)
+	lo := RM(cpu, cart, ptr)
+	hi := RM(cpu, cart, (ptr&0xFF00)|uint16((ptr+1)&0x00FF))
+	return LE(lo, hi)
 }
 
-// IndX — (d,X)   pós‑indexado pelo registrador X, *antes* de formar o par de bytes.
+// IndX - (d,X) - first adds X to operand, then reads pointer
 func IndX(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    zp := (RM(cpu, cart, cpu.PC+1) + cpu.X) & 0xFF         // wrap na zero‑page
-    lo := RM(cpu, cart, uint16(zp))
-    hi := RM(cpu, cart, uint16((zp+1)&0xFF))
-    return LE(lo, hi)
+	zp := (RM(cpu, cart, cpu.PC+1) + cpu.X) & 0xFF
+	lo := RM(cpu, cart, uint16(zp))
+	hi := RM(cpu, cart, uint16((zp+1)&0xFF))
+	return LE(lo, hi)
 }
 
-// IndY — (d),Y  pré‑indexado: ponteiro lido, soma Y, marca page‑cross.
+// IndY - (d),Y - reads pointer, then adds Y; marks page-cross
 func IndY(cpu *CPU, cart *cartridge.Cartridge) uint16 {
-    zp := RM(cpu, cart, cpu.PC+1)
-    lo := RM(cpu, cart, uint16(zp))
-    hi := RM(cpu, cart, uint16((zp+1)&0xFF))
-    base := LE(lo, hi)
-    addr := base + uint16(cpu.Y)
-    cpu.PageCrossed = BoolToByte(H(base) != H(addr))
-    return addr
+	zp := RM(cpu, cart, cpu.PC+1)
+	lo := RM(cpu, cart, uint16(zp))
+	hi := RM(cpu, cart, uint16((zp+1)&0xFF))
+	base := LE(lo, hi)
+	addr := base + uint16(cpu.Y)
+	cpu.PageCrossed = BoolToByte(H(base) != H(addr))
+	return addr
 }
