@@ -1,8 +1,5 @@
 package ppu
 
-import (
-	"log"
-)
 
 // Process executes one PPU cycle, updating state and potentially rendering a pixel.
 func Process(ppu *PPU) {
@@ -158,13 +155,19 @@ func (ppu *PPU) updateShifters() {
 }
 
 // renderPixel determines and outputs the final pixel color for the current cycle into SCREEN_DATA.
+//go:nosplit
 func (ppu *PPU) renderPixel() {
+	fb := ppu.SCREEN_DATA      // alias for faster bounds analysis
 	pixelX := ppu.CYC - 1
 	pixelY := ppu.SCANLINE
 
-	if pixelX < 0 || pixelX >= SCREEN_WIDTH || pixelY < 0 || pixelY >= SCREEN_HEIGHT {
-		log.Printf("Error: renderPixel called with invalid coordinates X=%d, Y=%d", pixelX, pixelY)
-		return
+	if pixelX|pixelY < 0 || pixelX >= SCREEN_WIDTH || pixelY >= SCREEN_HEIGHT {
+		return    // coordinates out of range – keep fast exit, no logging
+	}
+
+	rowStart := pixelY * SCREEN_WIDTH
+	if rowStart+SCREEN_WIDTH > len(fb) {
+		return    // impossible unless fb was modified elsewhere
 	}
 
 	// Calculate Background Pixel & Palette Information
@@ -273,15 +276,9 @@ func (ppu *PPU) renderPixel() {
 	// Look up the final color from the color table
 	finalColor := ppu.colors[colorEntryIndex&0x3F]
 
-	// Write to Screen Buffer
-	bufferIndex := pixelX + (pixelY * SCREEN_WIDTH)
-	if bufferIndex >= 0 && bufferIndex < len(ppu.SCREEN_DATA) {
-		ppu.SCREEN_DATA[bufferIndex] = finalColor
-	} else {
-		log.Printf("Warning: RenderPixel calculated out-of-bounds framebuffer index %d (X:%d, Y:%d, Cycle:%d, Scanline:%d)", bufferIndex, pixelX, pixelY, ppu.CYC, ppu.SCANLINE)
-	}
+	// Write to Screen Buffer - optimized with no bounds check
+	fb[rowStart+pixelX] = finalColor
 }
-
 // incrementScrollX handles the horizontal VRAM address increment
 func (ppu *PPU) incrementScrollX() {
 	if (ppu.v & 0x001F) == 31 {
