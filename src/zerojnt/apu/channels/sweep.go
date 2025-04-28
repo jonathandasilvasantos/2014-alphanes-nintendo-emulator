@@ -3,18 +3,18 @@ package channels
 
 // SweepUnit handles pitch sweeping for Pulse channels
 type SweepUnit struct {
-	channelNum int // 1 or 2, affects negate behavior
+	channelNum int // Channel number (1 or 2)
 
-	// Register Values ($4001 / $4005)
+	// Register values
 	enabled bool // Sweep enabled flag
-	period  byte // Divider period (0-7)
-	negate  bool // Negate flag (0: add, 1: subtract)
-	shift   byte // Shift count (0-7)
+	period  byte // Divider period
+	negate  bool // Direction (false: add, true: subtract)
+	shift   byte // Shift count
 
-	// Internal State
-	dividerCounter byte   // Counts down from period
-	reload         bool   // Flag to reload divider
-	targetPeriod   uint16 // Calculated target period after sweep
+	// Internal state
+	dividerCounter byte   // Divider counter
+	reload         bool   // Reload flag
+	targetPeriod   uint16 // Target period after sweep
 }
 
 // NewSweepUnit creates a new SweepUnit
@@ -84,13 +84,30 @@ func (s *SweepUnit) Clock(currentPeriod uint16) uint16 {
 	return currentPeriod
 }
 
-// isMuting checks if the channel should be muted
-func (s *SweepUnit) isMuting(currentPeriod uint16) bool {
-	if currentPeriod < 8 {
+// isMuting returns true when the channel should be silenced
+func (s *SweepUnit) isMuting(period uint16) bool {
+	if period < 8 {
 		return true
 	}
-	if s.targetPeriod > 0x7FF {
-		return true
+	if s.shift == 0 {
+		return false
 	}
-	return false
+
+	// Calculate target period
+	delta := period >> s.shift
+	var target uint16
+	if s.negate {
+		target = period - delta - btoi16(s.channelNum == 1)
+	} else {
+		target = period + delta
+	}
+	return target > 0x7FF
+}
+
+// Convert bool to uint16
+func btoi16(b bool) uint16 {
+	if b {
+		return 1
+	}
+	return 0
 }

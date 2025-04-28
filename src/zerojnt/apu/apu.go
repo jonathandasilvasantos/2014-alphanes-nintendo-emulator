@@ -373,6 +373,8 @@ func (apu *APU) writeRegisterInternal(addr uint16, value byte) {
 	case addr == 0x4017: // Frame Counter Control ($4017)
 		newMode5Step := (value & 0x80) != 0
 		newInhibitIRQ := (value & 0x40) != 0
+		apu.irqPending = false        // <— ALWAYS clear on any $4017 write
+
 
 		apu.sequenceMode5Step = newMode5Step
 		apu.inhibitIRQ = newInhibitIRQ

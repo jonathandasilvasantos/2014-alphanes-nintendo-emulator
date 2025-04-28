@@ -5,12 +5,12 @@ import (
 	"math"
 )
 
-// Duty cycle width definitions
+// Duty cycle width values
 var dutyCycleValues = [4]float64{
-	0.125, // 12.5 % (00000001)
-	0.25,  // 25 %  (00000011)
-	0.50,  // 50 %  (00001111)
-	0.25,  // DUTY 3 uses 25% width (mirrored)
+	0.125, // 12.5%
+	0.25,  // 25%
+	0.50,  // 50%
+	0.25,  // 25% (mirrored)
 }
 
 // PulseChannel represents a pulse wave channel in the NES APU
@@ -37,7 +37,7 @@ type PulseChannel struct {
 	sampleRate    float64
 }
 
-// NewPulseChannel creates and initializes a new PulseChannel
+// NewPulseChannel creates a new PulseChannel
 func NewPulseChannel(channelNum int, cpuClock float64, sampleRate float64) *PulseChannel {
 	p := &PulseChannel{
 		channelNum:          channelNum,
@@ -52,7 +52,7 @@ func NewPulseChannel(channelNum int, cpuClock float64, sampleRate float64) *Puls
 	return p
 }
 
-// Reset initializes the pulse channel to its power-up state
+// Reset initializes the pulse channel
 func (p *PulseChannel) Reset() {
 	p.enabled = false
 	p.lengthHalted = false
@@ -68,7 +68,7 @@ func (p *PulseChannel) Reset() {
 	p.recalculatePhaseInc = true
 }
 
-// WriteRegister handles writes to the pulse channel's registers
+// WriteRegister handles writes to registers
 func (p *PulseChannel) WriteRegister(addr uint16, value byte) {
 	reg := addr & 3
 
@@ -112,7 +112,7 @@ func (p *PulseChannel) WriteRegister(addr uint16, value byte) {
 	}
 }
 
-// updatePhaseIncrement calculates the phase increment and duty threshold
+// updatePhaseIncrement calculates phase increment and duty threshold
 func (p *PulseChannel) updatePhaseIncrement() {
 	effectivePeriod := float64(p.timerPeriod + 1)
 	if effectivePeriod < 1e-9 || p.timerPeriod >= 0x7FF {
@@ -134,29 +134,35 @@ func (p *PulseChannel) ClockTimer() {
 	// No implementation needed
 }
 
-// ClockEnvelope advances the envelope generator state
+// ClockEnvelope advances the envelope generator
 func (p *PulseChannel) ClockEnvelope() {
 	p.envelope.Clock()
 }
 
-// ClockLengthCounter advances the length counter state
+// ClockLengthCounter advances the length counter
 func (p *PulseChannel) ClockLengthCounter() {
 	if !p.lengthHalted && p.lengthCounter > 0 {
 		p.lengthCounter--
 	}
 }
 
-// ClockSweep advances the sweep unit state and updates the timer period
+// ClockSweep advances the sweep unit and updates timer period
 func (p *PulseChannel) ClockSweep() {
-	p.sweep.targetPeriod = p.timerPeriod
-	newPeriod := p.sweep.Clock(p.timerPeriod)
-	if newPeriod != p.timerPeriod {
-		if newPeriod > 0x7FF {
-			newPeriod = 0x7FF
-		}
-		p.timerPeriod = newPeriod
-		p.recalculatePhaseInc = true
-	}
+    p.sweep.targetPeriod = p.timerPeriod
+
+    if p.sweep.isMuting(p.timerPeriod) {
+        p.lengthCounter = 0
+        return
+    }
+
+    newPeriod := p.sweep.Clock(p.timerPeriod)
+    if newPeriod != p.timerPeriod {
+        if newPeriod > 0x7FF {
+            newPeriod = 0x7FF
+        }
+        p.timerPeriod = newPeriod
+        p.recalculatePhaseInc = true
+    }
 }
 
 // SetEnabled enables or disables the channel
@@ -167,12 +173,12 @@ func (p *PulseChannel) SetEnabled(enabled bool) {
 	}
 }
 
-// IsLengthCounterActive returns true if the length counter is non-zero
+// IsLengthCounterActive returns true if length counter is non-zero
 func (p *PulseChannel) IsLengthCounterActive() bool {
 	return p.lengthCounter > 0
 }
 
-// Output calculates the current audio sample using PolyBLEP
+// Output calculates the current audio sample
 func (p *PulseChannel) Output() float32 {
 	if !p.enabled || p.lengthCounter == 0 {
 		return 0.0
@@ -201,7 +207,7 @@ func (p *PulseChannel) Output() float32 {
 
 	var combinedOut float32
 	if p.dutyMode == 3 {
-		combinedOut = naiveOut - correction0 + correctionDuty
+		combinedOut = (1.0 - naiveOut) - correction0 + correctionDuty
 	} else {
 		combinedOut = naiveOut + correction0 - correctionDuty
 	}

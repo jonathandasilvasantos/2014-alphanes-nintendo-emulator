@@ -88,15 +88,16 @@ func (t *TriangleChannel) ClockTimer() {
 
 // ClockLinearCounter updates the linear counter state
 func (t *TriangleChannel) ClockLinearCounter() {
-	if t.linearReloadReq {
-		t.linearCounter = t.linearReloadVal
-	} else if t.linearCounter > 0 {
-		t.linearCounter--
-	}
-
-	if !t.lengthHalted {
-		t.linearReloadReq = false
-	}
+    // 1. Reload or decrement
+    if t.linearReloadReq {
+        t.linearCounter = t.linearReloadVal
+    } else if t.linearCounter > 0 {
+        t.linearCounter--
+    }
+    // 2. Clear reload request if length-halt flag is 0
+    if !t.lengthHalted {
+        t.linearReloadReq = false
+    }
 }
 
 // ClockLengthCounter updates the length counter state
