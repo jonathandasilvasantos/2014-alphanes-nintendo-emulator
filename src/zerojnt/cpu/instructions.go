@@ -172,7 +172,7 @@ func CMP(cpu *CPU, value uint16) {
 	result := uint16(cpu.A) - value
 	SetC(cpu, BoolToByte(cpu.A >= byte(value))) // Set Carry if A >= value
 	ZeroFlag(cpu, result)                     // Update Zero Flag
-	SetN(cpu, byte(result>>7))                // Update Negative Flag
+	SetN(cpu, byte((result & 0xFF) >> 7))
 }
 
 // CLC (Clear Carry Flag)
@@ -205,7 +205,7 @@ func CPX(cpu *CPU, value uint16) {
 	result := uint16(cpu.X) - value
 	SetC(cpu, BoolToByte(cpu.X >= byte(value))) // Set Carry if X >= value
 	ZeroFlag(cpu, result)                     // Update Zero Flag
-	SetN(cpu, byte(result>>7))                // Update Negative Flag
+	SetN(cpu, byte((result & 0xFF) >> 7))
 }
 
 // CPY (Compare Y Register)
@@ -214,7 +214,7 @@ func CPY(cpu *CPU, value uint16) {
 	result := uint16(cpu.Y) - value
 	SetC(cpu, BoolToByte(cpu.Y >= byte(value))) // Set Carry if Y >= value
 	ZeroFlag(cpu, result)                     // Update Zero Flag
-	SetN(cpu, byte(result>>7))                // Update Negative Flag
+	SetN(cpu, byte((result & 0xFF) >> 7))
 }
 
 // DEC (Decrement Memory)
