@@ -187,6 +187,13 @@ func WM(cpu *CPU, cart *cartridge.Cartridge, addr uint16, value byte) {
 				}
 			}
 			cpu.IO.StartOAMDMA(value)
+
+			// cycle penalty according to current CPU cycle parity
+			cyclePenalty := 513
+			if cpu.cycleCount&1 == 0 { // ímpar?
+				cyclePenalty = 514
+			}
+			cpu.IO.CPU_CYC_INCREASE = uint16(cyclePenalty)
 			break
 
 		case 0x4016: // Controller Strobe Register

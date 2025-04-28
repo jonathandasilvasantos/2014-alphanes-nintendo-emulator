@@ -225,7 +225,6 @@ func (io *IOPorts) StartOAMDMA(page byte) {
 	io.OAMDMA_Page = page
 	io.OAMDMA_Transfer = true
 	io.OAMDMA_Addr = 0
-	io.CPU_CYC_INCREASE = 513
 }
 
 // DoOAMDMATransfer performs one byte transfer during OAM DMA

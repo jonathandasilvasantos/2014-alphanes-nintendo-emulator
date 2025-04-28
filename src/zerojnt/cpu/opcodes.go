@@ -41,66 +41,103 @@ func nmi(cpu *CPU, cart *cartridge.Cartridge) {
     // 5. Add NMI cycles (7 cycles total)
     cpu.CYC = 7
 }
-
 func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 
-        // Handle IO operations that takes CPU cycles
-        cpu.CYC = cpu.CYC + cpu.IO.CPU_CYC_INCREASE
-        cpu.IO.CPU_CYC_INCREASE = 0
+	// Handle IO operations that takes CPU cycles
+	cpu.CYC = cpu.CYC + cpu.IO.CPU_CYC_INCREASE
+	cpu.IO.CPU_CYC_INCREASE = 0
 
-	
-	if cpu.CYC != 0 {
-		cpu.CYC--
+
+// If cycles remain from the previous operation, decrement and return
+if cpu.CYC != 0 {
+	cpu.CYC--
+	return
+}
+
+// --- Interrupt Polling ---
+// Check for IRQ first, before NMI and regular instruction fetch.
+
+// 1. Check for IRQ (Interrupt Request)
+isIRQAsserted := false
+if cpu.APU != nil && cpu.APU.IRQ() {
+	isIRQAsserted = true
+}
+// Check mapper only if APU didn't assert, preventing double check if both could assert
+if !isIRQAsserted && cart != nil && cart.IRQState() {
+	isIRQAsserted = true
+}
+
+// Service IRQ only if it's asserted AND interrupts are enabled (I flag is 0)
+if isIRQAsserted && FlagI(cpu) == 0 {
+	irq(cpu, cart) // Call the IRQ service routine (MUST be defined elsewhere)
+	// irq() sets cpu.CYC. We must return to let cycles decrement.
+	return
+}
+
+// 2. Check for NMI (Non-Maskable Interrupt) - Done after IRQ check
+if cpu.IO.NMI {
+	nmi(cpu, cart) // Call the NMI service routine (MUST be defined elsewhere)
+	cpu.IO.NMI = false // Clear the NMI flag after servicing
+	// nmi() sets cpu.CYC. We must return to let cycles decrement.
+	return // Ensure we don't execute a regular instruction after NMI
+}
+
+// --- No interrupt was serviced, proceed with debugging and opcode fetch ---
+
+// Fetch opcode *early* for debug checks? (Original code had it here)
+// Note: Fetching here is slightly less accurate 6502 behavior if debug alters PC,
+// but matches the original structure provided.
+op := RM(cpu, cart, cpu.PC)
+
+// Original Debugging Logic
+if (cpu.D.Enable) && (cpu.SwitchTimes > 8000) {
+	// This debug logic seems complex and potentially problematic.
+	// It compares the fetched 'op' with a debug value and might force an NMI.
+	// Keeping it as provided, but it might interfere with correct execution.
+	if op != DebugOp(cpu, cart) {
+		if DebugOp(cpu, cart) == 0x48 { // If debug expects PHA (0x48)
+				fmt.Printf("Debug Force NMI? Op Fetch: %x, Debug Expects: %x\n", op, DebugOp(cpu, cart))
+				nmi(cpu, cart) // Force NMI based on debug mismatch
+				// Original code had commented return; if NMI is forced, we should return.
+				return
+		}
+	}
+}
+
+
+if cpu.D.Verbose && cpu.D.Enable {
+	Verbose(cpu, cart) // MUST be defined elsewhere
+}
+
+cpu.SwitchTimes++
+
+if cpu.D.Enable {
+	DebugCompare(cpu, cart) // MUST be defined elsewhere
+	// Need to check if DebugCompare stopped the CPU
+	if !cpu.Running {
 		return
 	}
-	
+}
 
 
-		
+// Check the limit of opcodes (Debug function)
+cpu.Start = int(cpu.PC)
+if cpu.Start >= cpu.End { // Assuming End is a debug limit
+	cpu.Running = false
+	return
+}
 
-        op := RM(cpu, cart, cpu.PC)
+// Re-fetch opcode in case debug logic changed PC? (Safer, but original didn't do this here)
+// op = RM(cpu, cart, cpu.PC) // Uncomment if DebugCompare might change PC
 
-
-
-        if (cpu.D.Enable) && (cpu.SwitchTimes > 8000) {
-            if op != DebugOp(cpu, cart) {
-                if DebugOp(cpu, cart) == 0x48 {
-                        fmt.Printf("%x %x \n", op, DebugOp(cpu, cart))
-		        nmi(cpu, cart)
-                        //return
-                }
-            }
-        }
-
-
-
-
-	if cpu.D.Verbose && cpu.D.Enable { 
-		Verbose(cpu, cart)
-	}
-	
-	cpu.SwitchTimes++
-	
-	if cpu.D.Enable {
-		DebugCompare(cpu, cart)
-	}
-	
-	
-	// Check the limit of opcodes (Debug function)
-	cpu.Start = int(cpu.PC)
-	if cpu.Start >= cpu.End {
-		cpu.Running = false
-		return
-	}
-	
-	if cpu.IO.NMI {
-        nmi(cpu, cart)
-        cpu.IO.NMI = false
-        return // Ensure we don't execute a regular instruction after NMI
-    }
-	
-        op = RM(cpu, cart, cpu.PC)
-        cpu.lastPC = cpu.PC
+// Store PC *before* executing instruction (needed for relative branches, etc.)
+cpu.lastPC = cpu.PC
+// NOTE: The original 'op' fetch happened *before* the NMI check. This version fetches
+// it again *after* interrupt checks to ensure the correct instruction is processed
+// if no interrupt occurred. If the very first 'op' fetch needs to be the one used by
+// the switch statement later, move this line back up before the NMI check and remove
+// the first 'op' fetch. However, fetching after interrupt checks is generally more correct.
+op = RM(cpu, cart, cpu.PC) // Fetch opcode for the switch statement
 
 	
 	switch(RM(cpu, cart, cpu.PC)) {
@@ -1387,4 +1424,61 @@ case 0x5E: // LSR Absolute,X
 
 func Verbose(cpu *CPU, cart *cartridge.Cartridge) {
 	fmt.Printf("%4X  %2X  %2X %2X                       A:%2X X:%2X Y:%2X P:%2X SP:%2X CYC:%d SL: %d\n", cpu.PC, RM(cpu, cart, cpu.PC), RM(cpu, cart, cpu.PC+1), RM(cpu, cart, cpu.PC+2), cpu.A, cpu.X, cpu.Y, cpu.P, cpu.SP, 0, 0 )
+}
+
+
+
+// Add this new function in cpu/opcodes.go
+
+// irq handles a hardware interrupt request (IRQ).
+// Assumes the I flag was checked and found to be 0 before calling.
+// irq services a maskable hardware interrupt (IRQ).
+// It must only be called when the IRQ line is asserted *and*
+// the Interrupt-Disable flag (I) is clear.
+func irq(cpu *CPU, cart *cartridge.Cartridge) {
+	//------------------------------------------------------------
+	// 1. Push return address (current PC) to the stack.
+	//    NB: Unlike BRK, the PC is *not* incremented first.
+	//------------------------------------------------------------
+	PushWord(cpu, cpu.PC)
+
+	//------------------------------------------------------------
+	// 2. Push processor status with:
+	//       • bit-4 (B) = 0  (hardware IRQ)
+	//       • bit-5 always = 1 (hardware quirk)
+	//------------------------------------------------------------
+	status := (cpu.P &^ 0x10) | 0x20 // clear B, set bit-5
+	PushMemory(cpu, status)
+
+	//------------------------------------------------------------
+	// 3. Set Interrupt Disable flag so further IRQs are masked.
+	//------------------------------------------------------------
+	SetI(cpu, 1)
+
+	//------------------------------------------------------------
+	// 4. Vector fetch – BRK and IRQ share the same vector.
+	//------------------------------------------------------------
+	low  := RM(cpu, cart, 0xFFFE)
+	high := RM(cpu, cart, 0xFFFF)
+	cpu.PC = LE(low, high)
+
+	//------------------------------------------------------------
+	// 5. Account for the 7 CPU cycles the sequence takes.
+	//------------------------------------------------------------
+	cpu.CYC = 7
+
+	//------------------------------------------------------------
+	// 6. ACKNOWLEDGE THE SOURCE(S)  ── **FIX FOR IRQ-STORM BUG**
+	//------------------------------------------------------------
+	if cpu.APU != nil {
+		cpu.APU.ClearIRQ() // clears frame-IRQ and DMC-IRQ flags
+	}
+	// Most mappers keep their IRQ flag internal until the CPU
+	// writes a specific register, but a few (e.g. MMC3) also
+	// clear it automatically on edge-detect.  If your mapper
+	// exposes an explicit Clear method, call it here:
+	//
+	//   if cart != nil && cart.Mapper != nil {
+	//	     cart.Mapper.ClearIRQ()   // <-- add when available
+	//   }
 }

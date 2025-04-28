@@ -26,6 +26,10 @@ const (
 	CpuClockSpeed    = 1789773.0
 	FrameCounterRate = 240.0
 	CpuClockSpeedInt = 1789773
+	
+	// --- Cadência exata NTSC (7457,5 ciclos de CPU) ---
+	frameStepCyclesLong  int64 = 7458 // primeiro passo do sequenciador
+	frameStepCyclesShort int64 = 7457 // todos os demais
 )
 
 var (
@@ -64,6 +68,7 @@ type APU struct {
 	frameCounterCycleCounter int64
 	sampleGenCycleCounter    int64
 	cpuCycleCounter          uint64
+	currentStepCycles int64 // duração do passo atual do frame-sequencer
 }
 
 // NewAPU creates and initializes a new APU instance.
@@ -87,6 +92,7 @@ func NewAPU() (*APU, error) {
 		},
 		frameCounterCycleCounter: 0,
 		sampleGenCycleCounter:    0,
+		currentStepCycles: frameStepCyclesLong,
 	}
 
 	// Initialize APU registers
@@ -198,8 +204,15 @@ func (apu *APU) Clock() {
 
 	// Frame counter clocking
 	apu.frameCounterCycleCounter++
-	if apu.frameCounterCycleCounter >= CpuCyclesPerFrameStepInt {
-		apu.frameCounterCycleCounter -= CpuCyclesPerFrameStepInt
+	if apu.frameCounterCycleCounter >= apu.currentStepCycles {
+		apu.frameCounterCycleCounter -= apu.currentStepCycles
+
+		// Alterna 7458 / 7457 para manter 7457,5 de média
+		if apu.currentStepCycles == frameStepCyclesLong {
+			apu.currentStepCycles = frameStepCyclesShort
+		} else {
+			apu.currentStepCycles = frameStepCyclesLong
+		}
 		apu.clockFrameSequencer()
 	}
 
@@ -352,6 +365,11 @@ func (apu *APU) writeRegisterInternal(addr uint16, value byte) {
 		}
 		apu.irqPending = false
 
+		// Se o DMC vier a implementar IRQ, limpe aqui também
+		if apu.dmc != nil {
+			apu.dmc.ClearIRQ()
+		}
+
 	case addr == 0x4017: // Frame Counter Control ($4017)
 		newMode5Step := (value & 0x80) != 0
 		newInhibitIRQ := (value & 0x40) != 0
@@ -367,9 +385,14 @@ func (apu *APU) writeRegisterInternal(addr uint16, value byte) {
 			apu.irqPending = false
 		}
 
-		// Reset counters
-		apu.frameCounterCycleCounter = 0
-		apu.frameSequenceStep = 0
+		// Reset counters com atraso obrigatório (3 ou 4 ciclos de CPU)
+		delay := int64(3)              // Modo 0 (4-step)
+		if newMode5Step {              // Modo 1 (5-step)
+			delay = 4
+		}
+		apu.frameCounterCycleCounter = -delay
+		apu.currentStepCycles        = frameStepCyclesLong
+		apu.frameSequenceStep        = 0
 
 		// Mode 1 (5-step) immediate clocking
 		if apu.sequenceMode5Step {
@@ -429,10 +452,8 @@ func (apu *APU) IRQ() bool {
 // ClearIRQ allows the CPU to acknowledge and clear the APU IRQ flag.
 func (apu *APU) ClearIRQ() {
 	apu.regMu.Lock()
-	if apu.irqPending && LogIRQ {
-		log.Println("APU: CPU Cleared Frame IRQ flag via ClearIRQ()")
-	}
 	apu.irqPending = false
+	if apu.dmc != nil { apu.dmc.ClearIRQ() }
 	apu.regMu.Unlock()
 }
 

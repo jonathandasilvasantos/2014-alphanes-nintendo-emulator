@@ -1,8 +1,6 @@
 // File: apu/channels/dmc.go
 package channels
 
-import "log"
-
 // DMCChannel represents the Delta Modulation Channel
 type DMCChannel struct {
 	enabled     bool
@@ -54,7 +52,6 @@ func (d *DMCChannel) SetEnabled(enabled bool) {
 	} else {
 		// Handle enabling
 	}
-	log.Printf("DMC Enabled: %v (Output Level: %d)", d.enabled, d.outputLevel)
 }
 
 // IRQ returns the current IRQ status

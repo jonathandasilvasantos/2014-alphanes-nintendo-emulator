@@ -41,8 +41,8 @@ const (
 	// Target frame rate is 60 FPS (NTSC)
 	framesPerSecond = 60
 
-	// CPU cycles per frame = CPU frequency / frames per second
-	cpuCyclesPerFrame = cpuFrequency / framesPerSecond
+	// CPU cycles per frame as a float to preserve the fractional part
+	cpuCyclesPerFrameF = float64(cpuFrequency) / float64(framesPerSecond)
 
 	// Duration of one frame in nanoseconds
 	frameTime = time.Second / framesPerSecond
@@ -59,6 +59,7 @@ type Emulator struct {
 	Paused         bool
 	cycleCount     uint64 // Global cycle counter
 	frameTimer     *time.Ticker
+	leftover       float64 // Fractional cycle accumulator
 }
 
 var (
@@ -143,11 +144,12 @@ func initializeEmulator() {
 
 	NesInput = input.NewInputHandler(Nesppu.IO)
 
-	// Initialize emulator state
+	// Initialize emulator state with leftover set to 0
 	Alphanes = Emulator{
 		Running:    true,
 		Paused:     false,
 		cycleCount: 0,
+		leftover:   0,
 	}
 }
 
@@ -194,24 +196,24 @@ func emulate() {
 	for Alphanes.Running && Nescpu.Running {
 
 		if !Alphanes.Paused {
+			// Calculate the cycle budget for this frame with fractional accumulation
+			budget := cpuCyclesPerFrameF + Alphanes.leftover
+			cyclesBudget := int(budget)                      // Integer part for this frame
+			Alphanes.leftover = budget - float64(cyclesBudget) // Store fractional part for next frame
+			
 			// Process a batch of CPU cycles
 			batchSize := ppuBatchSize
-			if cyclesThisFrame + uint64(batchSize) > cpuCyclesPerFrame {
-				// Don't exceed cycles per frame
-				batchSize = int(cpuCyclesPerFrame - cyclesThisFrame)
+			if cyclesThisFrame + uint64(batchSize) > uint64(cyclesBudget) {
+				// Don't exceed cycles budget for this frame
+				batchSize = int(uint64(cyclesBudget) - cyclesThisFrame)
 			}
 			
 			if batchSize > 0 {
 				// Process CPU and PPU cycles in a single optimized batch
 				for i := 0; i < batchSize; i++ {
-					
-					// CHECK FOR KEYBOARD INPUT.
-					
-					
 					// Execute one CPU cycle
 					cpu.Process(&Nescpu, Cart)
 				
-					
 					// Execute PPU cycles (3 per CPU cycle)
 					for j := 0; j < ppuCyclesPerCpuCycle; j++ {
 						ppu.Process(Nesppu)
@@ -230,8 +232,8 @@ func emulate() {
 				cyclesThisFrame += uint64(batchSize)
 			}
 			
-			// Check if we've completed a frame
-			if cyclesThisFrame >= cpuCyclesPerFrame {
+			// Check if we've completed a frame based on our dynamic budget
+			if cyclesThisFrame >= uint64(cyclesBudget) {
 				// Wait for the next frame tick for consistent timing
 				<-frameTicker.C
 
@@ -249,17 +251,12 @@ func emulate() {
 						keyName := sdl.GetKeyName(e.Keysym.Sym)
 						isPressed := (e.State == sdl.PRESSED)
 		
-		
 						if keyName == "Escape" && isPressed {
 							fmt.Printf("DEBUG: Escape key pressed, quitting application\n")
 							return
 						}
-		
-		
 					}
 				}
-		
-			
 				
 				cyclesThisFrame = 0
 				frameCount++
@@ -271,7 +268,9 @@ func emulate() {
 					fps := float64(framesProcessed) / timeElapsed
 					
 					// Calculate CPU cycles per second for performance metrics
-					cyclesPerSecond := float64(framesProcessed * cpuCyclesPerFrame) / timeElapsed
+					// Use an average cycles/frame for this calculation
+					avgCyclesPerFrame := float64(cpuFrequency) / float64(framesPerSecond)
+					cyclesPerSecond := float64(framesProcessed) * avgCyclesPerFrame / timeElapsed
 					cpuPercentage := (cyclesPerSecond / float64(cpuFrequency)) * 100
 					
 					fmt.Printf("Performance: %.2f FPS (target: %d) - CPU utilization: %.1f%%\n", 
@@ -282,7 +281,6 @@ func emulate() {
 				}
 			}
 		} else {
-			
 			// Consume any frame ticks while paused
 			select {
 			case <-frameTicker.C:

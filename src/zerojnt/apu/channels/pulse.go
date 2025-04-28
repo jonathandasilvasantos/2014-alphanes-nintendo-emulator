@@ -7,10 +7,10 @@ import (
 
 // Duty cycle width definitions
 var dutyCycleValues = [4]float64{
-	0.125, // 12.5%
-	0.25,  // 25%
-	0.50,  // 50%
-	0.75,  // 75%
+	0.125, // 12.5 % (00000001)
+	0.25,  // 25 %  (00000011)
+	0.50,  // 50 %  (00001111)
+	0.25,  // DUTY 3 uses 25% width (mirrored)
 }
 
 // PulseChannel represents a pulse wave channel in the NES APU
@@ -124,9 +124,6 @@ func (p *PulseChannel) updatePhaseIncrement() {
 	}
 
 	duty := dutyCycleValues[p.dutyMode]
-	if p.dutyMode == 3 {
-		duty = dutyCycleValues[1]
-	}
 	p.dutyThreshold = uint32(duty * math.Exp2(32))
 
 	p.recalculatePhaseInc = false
@@ -190,26 +187,21 @@ func (p *PulseChannel) Output() float32 {
 	}
 
 	naiveOut := float32(0.0)
-	is75Duty := (p.dutyMode == 3)
-	currentDutyThreshold := p.dutyThreshold
-
-	if is75Duty {
-		if p.phaseAccumulator >= currentDutyThreshold {
-			naiveOut = 1.0
-		}
-	} else {
-		if p.phaseAccumulator < currentDutyThreshold {
-			naiveOut = 1.0
-		}
+	high := p.phaseAccumulator < p.dutyThreshold
+	if p.dutyMode == 3 {
+		high = !high // Mirror for duty mode 3
+	}
+	if high {
+		naiveOut = 1.0
 	}
 
 	correction0 := polyBlepCorrection(p.phaseAccumulator, p.phaseIncrement)
-	phaseRelativeToDuty := p.phaseAccumulator - currentDutyThreshold
+	phaseRelativeToDuty := p.phaseAccumulator - p.dutyThreshold
 	correctionDuty := polyBlepCorrection(phaseRelativeToDuty, p.phaseIncrement)
 
 	var combinedOut float32
-	if is75Duty {
-		combinedOut = naiveOut + correctionDuty - correction0
+	if p.dutyMode == 3 {
+		combinedOut = naiveOut - correction0 + correctionDuty
 	} else {
 		combinedOut = naiveOut + correction0 - correctionDuty
 	}

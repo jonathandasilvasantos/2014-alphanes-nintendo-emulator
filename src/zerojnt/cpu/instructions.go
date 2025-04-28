@@ -527,12 +527,12 @@ func JSR(cpu *CPU, value uint16) {
 // BRK (Force Interrupt)
 // Forces the generation of an interrupt request.
 func BRK(cpu *CPU, cart *cartridge.Cartridge) {
-	PushWord(cpu, cpu.PC+1)        // Push PC + 1 (return address after BRK) onto the stack
-	PHP(cpu)                       // Push processor status with B flag set to 1
-	SEI(cpu)                       // Set Interrupt Disable to prevent further interrupts
-	cpu.PC = LE(RM(cpu, cart, 0xFFFE), RM(cpu, cart, 0xFFFF)) // Load PC from interrupt vector
+	PushWord(cpu, cpu.PC+2)
+	PHP(cpu)
+	SEI(cpu)
+	cpu.PC = LE(RM(cpu, cart, 0xFFFE), RM(cpu, cart, 0xFFFF))
+	cpu.CYC = 7
 }
-
 // RTI (Return from Interrupt)
 // Returns from an interrupt by pulling the processor status and program counter from the stack.
 func RTI(cpu *CPU) {
