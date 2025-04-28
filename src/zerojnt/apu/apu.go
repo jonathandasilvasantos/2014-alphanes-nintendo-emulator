@@ -13,8 +13,9 @@ import (
 const (
 	// Audio configuration
 	SampleRate        = 44100
-	BufferSizeSamples = 4096
+	BufferSizeSamples = 8192          // ← fewer underruns
 	RingBufferSize    = BufferSizeSamples * 4
+	batchSamples      = 8             // number of samples mixed per call
 
 	// Debug flags
 	DebugAudio        = false
@@ -50,7 +51,7 @@ type APU struct {
 	// Audio output buffering
 	ring   *ringBuf
 	stream *portaudio.Stream
-	regMu  sync.Mutex
+	regMu  sync.RWMutex
 
 	bufferStats struct {
 		underruns  uint64
@@ -219,8 +220,13 @@ func (apu *APU) Clock() {
 	// Audio sample generation
 	apu.sampleGenCycleCounter++
 	if apu.sampleGenCycleCounter >= CpuCyclesPerAudioSampleInt {
-		apu.sampleGenCycleCounter -= CpuCyclesPerAudioSampleInt
-		apu.generateSample()
+		// Mix several samples in one go
+		needed := int(apu.sampleGenCycleCounter / CpuCyclesPerAudioSampleInt)
+		if needed > batchSamples {
+			needed = batchSamples
+		}
+		apu.sampleGenCycleCounter -= int64(needed) * CpuCyclesPerAudioSampleInt
+		apu.generateSamples(needed)
 	}
 }
 
@@ -287,19 +293,30 @@ func (apu *APU) clockLengthAndSweep() {
 	apu.noise.ClockLengthCounter()
 }
 
+// generateSamples generates multiple audio samples at once
+func (apu *APU) generateSamples(n int) {
+	for i := 0; i < n; i++ {
+		apu.generateSample()
+	}
+}
+
 // generateSample creates one audio sample and pushes it to the ring buffer.
 func (apu *APU) generateSample() {
-	// Lock to ensure channel state consistency
-	apu.regMu.Lock()
+	// Snapshot register-mutable state quickly
+	apu.regMu.RLock()
+	p1 := apu.pulse1
+	p2 := apu.pulse2
+	tr := apu.triangle
+	nz := apu.noise
+	//d := apu.dmc
+	apu.regMu.RUnlock()
 
-	// Get channel outputs (normalized 0.0 to 1.0)
-	p1Out := apu.pulse1.Output()
-	p2Out := apu.pulse2.Output()
-	triOut := apu.triangle.Output()
-	noiOut := apu.noise.Output()
-	dmcOut := float32(0.0)
-
-	apu.regMu.Unlock()
+	// Compute outputs **after** the lock
+	p1Out := p1.Output()
+	p2Out := p2.Output()
+	triOut := tr.Output()
+	noiOut := nz.Output()
+	dmcOut := float32(0.0) // DMC not yet implemented
 
 	// Mix channels
 	mixedSample := apu.mixer.MixChannels(p1Out, p2Out, triOut, noiOut, dmcOut)
