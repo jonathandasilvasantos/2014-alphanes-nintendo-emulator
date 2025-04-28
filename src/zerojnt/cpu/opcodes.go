@@ -1428,57 +1428,32 @@ func Verbose(cpu *CPU, cart *cartridge.Cartridge) {
 
 
 
-// Add this new function in cpu/opcodes.go
-
 // irq handles a hardware interrupt request (IRQ).
-// Assumes the I flag was checked and found to be 0 before calling.
-// irq services a maskable hardware interrupt (IRQ).
-// It must only be called when the IRQ line is asserted *and*
-// the Interrupt-Disable flag (I) is clear.
+// Must only be called when IRQ line is asserted and I flag is clear.
 func irq(cpu *CPU, cart *cartridge.Cartridge) {
-	//------------------------------------------------------------
-	// 1. Push return address (current PC) to the stack.
-	//    NB: Unlike BRK, the PC is *not* incremented first.
-	//------------------------------------------------------------
 	PushWord(cpu, cpu.PC)
 
-	//------------------------------------------------------------
-	// 2. Push processor status with:
-	//       • bit-4 (B) = 0  (hardware IRQ)
-	//       • bit-5 always = 1 (hardware quirk)
-	//------------------------------------------------------------
 	status := (cpu.P &^ 0x10) | 0x20 // clear B, set bit-5
 	PushMemory(cpu, status)
 
-	//------------------------------------------------------------
-	// 3. Set Interrupt Disable flag so further IRQs are masked.
-	//------------------------------------------------------------
 	SetI(cpu, 1)
 
-	//------------------------------------------------------------
-	// 4. Vector fetch – BRK and IRQ share the same vector.
-	//------------------------------------------------------------
+	// Vector fetch for IRQ
 	low  := RM(cpu, cart, 0xFFFE)
 	high := RM(cpu, cart, 0xFFFF)
 	cpu.PC = LE(low, high)
 
-	//------------------------------------------------------------
-	// 5. Account for the 7 CPU cycles the sequence takes.
-	//------------------------------------------------------------
+	// Account for CPU cycles
 	cpu.CYC = 7
 
-	//------------------------------------------------------------
-	// 6. ACKNOWLEDGE THE SOURCE(S)  ── **FIX FOR IRQ-STORM BUG**
-	//------------------------------------------------------------
+	// Acknowledge interrupt sources
 	if cpu.APU != nil {
 		cpu.APU.ClearIRQ() // clears frame-IRQ and DMC-IRQ flags
 	}
-	// Most mappers keep their IRQ flag internal until the CPU
-	// writes a specific register, but a few (e.g. MMC3) also
-	// clear it automatically on edge-detect.  If your mapper
-	// exposes an explicit Clear method, call it here:
-	//
-	//   if cart != nil && cart.Mapper != nil {
-	//	     cart.Mapper.ClearIRQ()   // <-- add when available
-	//   }
+	
+
+	if cart != nil && cart.Mapper != nil {
+		cart.Mapper.ClearIRQ()   // ← new line
+	}
+
 }

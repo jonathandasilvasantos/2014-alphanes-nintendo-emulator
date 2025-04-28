@@ -447,3 +447,5 @@ func (m *MMC1) IRQState() bool {
 func (m *MMC1) ClockIRQCounter() {
 	// MMC1 has no IRQ counter
 }
+
+func (m *MMC1) ClearIRQ() {}

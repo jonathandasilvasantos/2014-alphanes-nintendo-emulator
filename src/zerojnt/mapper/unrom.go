@@ -199,3 +199,5 @@ func getMirroringModeString(v, h, four bool) string {
 	}
 	return "Single Screen (Fixed Wiring)"
 }
+
+func (m *UNROM) ClearIRQ() {}

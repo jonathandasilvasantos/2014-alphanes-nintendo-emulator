@@ -53,6 +53,10 @@ type MMC3 struct {
 	state MMC3State
 	cart  MapperAccessor // Interface for accessing cartridge data
 	mutex sync.RWMutex   // Use RWMutex for separate read/write locking
+	irqCounter   byte
+	irqReload    byte
+	irqEnabled   bool
+	irqAsserted  bool  
 }
 
 // Compile-time check to ensure MMC3 implements the Mapper interface
@@ -387,7 +391,15 @@ func (m *MMC3) ClockIRQCounter() {
 
 // IRQState returns true if the mapper is currently asserting the IRQ line.
 func (m *MMC3) IRQState() bool {
-	m.mutex.RLock() 
-	defer m.mutex.RUnlock()
-	return m.state.irqPending
+    m.mutex.RLock()
+    state := m.irqAsserted
+    m.mutex.RUnlock()
+    return state
+}
+
+// ClearIRQ clears the asserted IRQ flag after the CPU vector fetch.
+func (m *MMC3) ClearIRQ() {
+    m.mutex.Lock()
+    m.irqAsserted = false
+    m.mutex.Unlock()
 }

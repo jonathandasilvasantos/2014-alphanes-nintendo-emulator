@@ -98,3 +98,4 @@ func (m *NROM) IRQState() bool {
 // ClockIRQCounter does nothing for NROM
 func (m *NROM) ClockIRQCounter() {
 }
+func (m *NROM) ClearIRQ() {}

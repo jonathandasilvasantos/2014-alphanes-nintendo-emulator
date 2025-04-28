@@ -13,12 +13,14 @@ func RM(cpu *CPU, cart *cartridge.Cartridge, addr uint16) byte {
 	case addr < 0x2000:
 		return cpu.IO.CPU_RAM[addr&0x07FF]
 
-	// PPU Registers (8 registers mirrored)
+	// PPU Registers (8 registers mirrored every 8 bytes)
 	case addr >= 0x2000 && addr < 0x4000:
 		if cpu.ppu == nil {
 			return 0
 		}
-		return cpu.ppu.ReadRegister(addr)
+		// Mirror every 8 bytes within $2000-$3FFF range (0x2008 maps to 0x2000, etc.)
+		ppuAddr := uint16(0x2000 | (addr & 0x0007))
+		return cpu.ppu.ReadRegister(ppuAddr)
 
 	// APU and I/O Registers
 	case addr >= 0x4000 && addr <= 0x401F:
@@ -154,12 +156,14 @@ func WM(cpu *CPU, cart *cartridge.Cartridge, addr uint16, value byte) {
 		cpu.IO.CPU_RAM[addr&0x07FF] = value
 		return
 
-	// PPU Registers (8 registers mirrored)
+	// PPU Registers (8 registers mirrored every 8 bytes)
 	case addr >= 0x2000 && addr < 0x4000:
 		if cpu.ppu == nil {
 			return
 		}
-		cpu.ppu.WriteRegister(addr, value)
+		// Mirror every 8 bytes within $2000-$3FFF range (0x2008 maps to 0x2000, etc.)
+		ppuAddr := uint16(0x2000 | (addr & 0x0007))
+		cpu.ppu.WriteRegister(ppuAddr, value)
 		return
 
 	// APU and I/O Registers
@@ -190,7 +194,7 @@ func WM(cpu *CPU, cart *cartridge.Cartridge, addr uint16, value byte) {
 
 			// cycle penalty according to current CPU cycle parity
 			cyclePenalty := 513
-			if cpu.cycleCount&1 == 0 { // ímpar?
+			if cpu.cycleCount&1 == 0 { // even?
 				cyclePenalty = 514
 			}
 			cpu.IO.CPU_CYC_INCREASE = uint16(cyclePenalty)

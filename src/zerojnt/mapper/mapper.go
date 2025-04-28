@@ -50,6 +50,7 @@ type Mapper interface {
 	Write(addr uint16, value byte)
 	IRQState() bool
 	ClockIRQCounter()
+	ClearIRQ()
 }
 
 // MapperError represents mapper-specific errors
