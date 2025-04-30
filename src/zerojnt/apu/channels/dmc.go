@@ -1,4 +1,3 @@
-// File: apu/channels/dmc.go
 package channels
 
 // DMCChannel represents the Delta Modulation Channel

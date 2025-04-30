@@ -89,10 +89,10 @@ func (t *TriangleChannel) ClockTimer() {
 // ClockLinearCounter updates the linear counter state
 func (t *TriangleChannel) ClockLinearCounter() {
     // 1. Reload or decrement
-    if t.linearReloadReq {
+    if t.linearReloadReq { // Reload takes precedence
         t.linearCounter = t.linearReloadVal
     } else if t.linearCounter > 0 {
-        t.linearCounter--
+        t.linearCounter-- // Only decrement if no reload request
     }
     // 2. Clear reload request if length-halt flag is 0
     if !t.lengthHalted {

@@ -171,12 +171,18 @@ func WM(cpu *CPU, cart *cartridge.Cartridge, addr uint16, value byte) {
 		switch addr {
 		case 0x4014: // OAM DMA Register
 			if cpu.ppu == nil {
-				break
+				return // Cannot perform DMA without PPU
 			}
 
-			dmaSourceAddrBase := uint16(value) << 8
-			oamDestAddrStart := uint16(cpu.IO.OAMADDR)
+			// *** CAPTURE PARITY AT WRITE TIME ***
+			// Need the cycle count *before* the DMA starts.
+			// Assuming cpu.cycleCount reflects the CPU cycle *at the start* of this WM call.
+			// (If emulate() increments cycleCount *after* WM, this is correct. If before, needs adjustment)
+			cpuCycleParityOdd := (cpu.cycleCount & 1) != 0
 
+			dmaSourceAddrBase := uint16(value) << 8
+			// OAMADDR ($2003) might not be 0, DMA can start mid-OAM
+			oamDestAddrStart := uint16(cpu.IO.OAMADDR)
 			for i := 0; i < 256; i++ {
 				sourceAddr := dmaSourceAddrBase + uint16(i)
 				dataByte := RM(cpu, cart, sourceAddr)
@@ -191,14 +197,16 @@ func WM(cpu *CPU, cart *cartridge.Cartridge, addr uint16, value byte) {
 				}
 			}
 			cpu.IO.StartOAMDMA(value)
-
-			// cycle penalty according to current CPU cycle parity
+			
+			// Cycle penalty calculation based on parity *at the time of the write*
+			// NesDev Wiki: "This takes 513 + P CPU cycles, where P is 1 if the CPU is on an odd DMA cycle..."
+			// So, if cpu.cycleCount *at the start* is odd, penalty is 514. If even, 513.
 			cyclePenalty := 513
-			if cpu.cycleCount&1 == 0 { // even?
+			if cpuCycleParityOdd { // If cycle count *before* DMA start is ODD
 				cyclePenalty = 514
 			}
+
 			cpu.IO.CPU_CYC_INCREASE = uint16(cyclePenalty)
-			break
 
 		case 0x4016: // Controller Strobe Register
 			strobeVal := value & 1
@@ -217,7 +225,6 @@ func WM(cpu *CPU, cart *cartridge.Cartridge, addr uint16, value byte) {
 					controller.ShiftCounter = 0
 				}
 			}
-			break
 
 		case 0x4017: // APU Frame Counter / P2 Strobe
 			fallthrough
@@ -229,10 +236,7 @@ func WM(cpu *CPU, cart *cartridge.Cartridge, addr uint16, value byte) {
 			if cpu.APU != nil {
 				cpu.APU.WriteRegister(addr, value)
 			}
-			break
-
-		default:
-			break
+			// Other IO registers: Fall through (no specific action needed here)
 		}
 		return
 

@@ -44,7 +44,7 @@ func nmi(cpu *CPU, cart *cartridge.Cartridge) {
 func emulate (cpu *CPU, cart *cartridge.Cartridge) {
 
 	// Handle IO operations that takes CPU cycles
-	cpu.CYC = cpu.CYC + cpu.IO.CPU_CYC_INCREASE
+	// cpu.CYC = cpu.CYC + cpu.IO.CPU_CYC_INCREASE // This is handled in Process now
 	cpu.IO.CPU_CYC_INCREASE = 0
 
 
@@ -1403,6 +1403,13 @@ case 0x5E: // LSR Absolute,X
     cpu.PC += 3                   // Increment Program Counter by 3 bytes (opcode + 2-byte address)
     break
 
+	// Unofficial SLO opcodes (treat as 3-byte NOPs for now, adjust cycles later if needed)
+    case 0x0F, 0x1F, 0x3F, 0x5F, 0x7F, 0xDF: // SLO AbsX (ASL + ORA) - Takes 7 cycles
+		// Skipping actual SLO operation, just advancing PC and consuming cycles
+        cpu.PC += 3
+        cpu.CYC = 7 // Use 7 cycles as a better estimate for SLO Abs,X
+        break
+	// Note: Other SLO variants exist (Zp, IndX, etc.) with different opcodes/cycles
 
 
 
@@ -1446,11 +1453,11 @@ func irq(cpu *CPU, cart *cartridge.Cartridge) {
 	// Account for CPU cycles
 	cpu.CYC = 7
 
-	// Acknowledge interrupt sources
+	// Acknowledge interrupt sources that might have triggered the IRQ
 	if cpu.APU != nil {
 		cpu.APU.ClearIRQ() // clears frame-IRQ and DMC-IRQ flags
 	}
-	
+
 
 	if cart != nil && cart.Mapper != nil {
 		cart.Mapper.ClearIRQ()   // ← new line

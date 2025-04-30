@@ -1,4 +1,3 @@
-// File: apu/channels/noise.go
 package channels
 
 // Noise channel period lookup table (NTSC values)

@@ -4,6 +4,9 @@ package ppu
 func (ppu *PPU) fetchNTByte() {
 	addr := 0x2000 | (ppu.v & 0x0FFF) // Nametable base + NT address bits from v
 	ppu.nt_byte = ppu.ReadPPUMemory(addr)
+
+	// Update A12 state for potential IRQ clocking (if needed here)
+	// ppu.Cart.ClockIRQCounter((addr & 0x1000) != 0) // Example - Usually done after tile fetches
 }
 
 // fetchATByte fetches the Attribute Table byte based on 'v'.
@@ -11,6 +14,9 @@ func (ppu *PPU) fetchATByte() {
 	// Address: 0x23C0 | Nametable bits | CoarseY bits / 4 | CoarseX bits / 4
 	addr := 0x23C0 | (ppu.v & 0x0C00) | ((ppu.v >> 4) & 0x38) | ((ppu.v >> 2) & 0x07)
 	ppu.at_byte = ppu.ReadPPUMemory(addr)
+
+	// Update A12 state for potential IRQ clocking (if needed here)
+	// ppu.Cart.ClockIRQCounter((addr & 0x1000) != 0) // Example
 }
 
 // fetchTileDataLow fetches the low byte of the background tile pattern.
@@ -20,6 +26,10 @@ func (ppu *PPU) fetchTileDataLow() {
 	tileIndex := uint16(ppu.nt_byte)
 	addr := patternTable + tileIndex*16 + fineY
 	ppu.tile_data_lo = ppu.ReadPPUMemory(addr)
+
+	// Clock the mapper IRQ counter with the A12 state *during* this fetch
+	// currentA12State := (addr & 0x1000) != 0 // Argument removed to match function signature
+	ppu.Cart.ClockIRQCounter()
 }
 
 // fetchTileDataHigh fetches the high byte of the background tile pattern.
@@ -29,6 +39,10 @@ func (ppu *PPU) fetchTileDataHigh() {
 	tileIndex := uint16(ppu.nt_byte)
 	addr := patternTable + tileIndex*16 + fineY + 8 // High plane is +8 bytes offset
 	ppu.tile_data_hi = ppu.ReadPPUMemory(addr)
+
+	// Clock the mapper IRQ counter with the A12 state *during* this fetch
+	// currentA12State := (addr & 0x1000) != 0 // Argument removed to match function signature
+	ppu.Cart.ClockIRQCounter()
 }
 
 // loadBackgroundShifters loads fetched tile data into background shift registers.
@@ -162,6 +176,10 @@ func (ppu *PPU) fetchSprites() {
 		// Fetch pattern bytes
 		tileLo := ppu.ReadPPUMemory(tileAddr)
 		tileHi := ppu.ReadPPUMemory(tileAddr + 8)
+		
+		// Clock the mapper IRQ counter with A12 state during sprite fetch
+		// currentA12State := (tileAddr & 0x1000) != 0 // Argument removed to match function signature
+		ppu.Cart.ClockIRQCounter() // Clock for lo byte fetch
 
 		// Apply horizontal flip if needed
 		if flipHoriz {

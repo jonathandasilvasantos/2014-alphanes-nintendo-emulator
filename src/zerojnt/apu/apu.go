@@ -13,7 +13,7 @@ import (
 const (
 	// Audio configuration
 	SampleRate        = 44100
-	BufferSizeSamples = 8192          // ← fewer underruns
+	BufferSizeSamples = 22050          // ← fewer underruns
 	RingBufferSize    = BufferSizeSamples * 4
 	batchSamples      = 8             // number of samples mixed per call
 
@@ -65,6 +65,7 @@ type APU struct {
 	inhibitIRQ        bool
 	irqPending        bool
 
+	irqJustCleared    int    // Grace period counter after $4017 write
 	// Timing counters
 	frameCounterCycleCounter int64
 	sampleGenCycleCounter    int64
@@ -390,7 +391,7 @@ func (apu *APU) writeRegisterInternal(addr uint16, value byte) {
 	case addr == 0x4017: // Frame Counter Control ($4017)
 		newMode5Step := (value & 0x80) != 0
 		newInhibitIRQ := (value & 0x40) != 0
-		apu.irqPending = false        // <— ALWAYS clear on any $4017 write
+		wasPending := apu.irqPending
 
 
 		apu.sequenceMode5Step = newMode5Step
@@ -401,7 +402,13 @@ func (apu *APU) writeRegisterInternal(addr uint16, value byte) {
 			if LogIRQ {
 				log.Printf("APU: Frame IRQ Cleared by inhibit flag in $4017 write")
 			}
+		}
+
+		// Always clear the IRQ line state on *any* $4017 write.
+		// If it was pending, set the grace period.
+		if wasPending {
 			apu.irqPending = false
+			apu.irqJustCleared = 2 // Set grace period
 		}
 
 		// Reset counters com atraso obrigatório (3 ou 4 ciclos de CPU)
@@ -446,11 +453,18 @@ func (apu *APU) ReadStatus() byte {
 	// Read and clear IRQ
 	apu.regMu.Lock()
 	frameIRQ := apu.irqPending
-	apu.irqPending = false
+	gracePeriodActive := apu.irqJustCleared > 0
+
+	if gracePeriodActive {
+		apu.irqJustCleared--
+		frameIRQ = false // Ignore pending flag during grace period
+	} else {
+		apu.irqPending = false // Clear actual pending flag if read outside grace period
+	}
 	apu.regMu.Unlock()
 
 	if frameIRQ {
-		status |= 0x40
+		status |= 0x40 // Set frame IRQ bit if it was truly pending and not cleared by grace period
 		if LogIRQ {
 			log.Printf("APU Read $4015: Status=$%02X (IRQ was Pending, now cleared)", status)
 		}
@@ -464,11 +478,16 @@ func (apu *APU) ReadStatus() byte {
 // IRQ returns true if the frame counter or DMC generated an interrupt.
 func (apu *APU) IRQ() bool {
 	apu.regMu.Lock()
-	defer apu.regMu.Unlock()
-	return apu.irqPending
+	isPending := apu.irqPending
+	gracePeriodActive := apu.irqJustCleared > 0
+	apu.regMu.Unlock()
+	// Only report IRQ if it's pending AND the grace period is over
+	return isPending && !gracePeriodActive
+	// Note: DMC IRQ check would be OR'd here if implemented
+	// return (isPending && !gracePeriodActive) || (apu.dmc != nil && apu.dmc.IRQ())
 }
 
-// ClearIRQ allows the CPU to acknowledge and clear the APU IRQ flag.
+// ClearIRQ allows the CPU to acknowledge and clear the APU frame counter IRQ flag.
 func (apu *APU) ClearIRQ() {
 	apu.regMu.Lock()
 	apu.irqPending = false

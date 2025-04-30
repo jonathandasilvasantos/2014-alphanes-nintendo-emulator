@@ -1,4 +1,3 @@
-// File: apu/channels/envelope.go
 package channels
 
 // EnvelopeUnit represents the volume envelope generator used by Pulse and Noise channels.

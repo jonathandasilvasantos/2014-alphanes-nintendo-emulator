@@ -75,6 +75,8 @@ type PPU struct {
 	spriteZeroHitPossible bool 
 	spriteZeroBeingRendered bool 
 
+	lastA12State bool // Tracks the previous state of A12 for edge detection (used by mapper clock)
+
 	// Color Palette
 	colors [64]uint32
 }
@@ -118,6 +120,7 @@ func StartPPU(io *ioports.IOPorts, cart *cartridge.Cartridge) (*PPU, error) {
 	ppu.bg_attr_shift_lo, ppu.bg_attr_shift_hi = 0, 0
 	ppu.spriteCount = 0
 	ppu.spriteZeroHitPossible = false
+	ppu.lastA12State = false // Initialize A12 tracking
 	ppu.spriteZeroBeingRendered = false
 	for i := range ppu.secondaryOAM { ppu.secondaryOAM[i] = 0xFF }
 	for i := 0; i < 8; i++ {

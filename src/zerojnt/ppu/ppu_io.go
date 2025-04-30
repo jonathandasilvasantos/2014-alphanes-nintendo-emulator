@@ -155,33 +155,50 @@ func (ppu *PPU) ReadRegister(addr uint16) byte {
 
 	switch reg {
 	case 0x02: // PPUSTATUS ($2002)
-		status := ppu.IO.PPUSTATUS.Get() | (ppu.IO.LastRegWrite & 0x1F)
-		ppu.IO.PPUSTATUS.VBLANK = false
-		ppu.w = 0
-		ppu.IO.NMI = false
+		// Re-introduce decay simulation ONLY for the lower 5 bits. Keep upper bits clean.
+		status := (ppu.IO.PPUSTATUS.Get() & 0xE0) | (ppu.IO.LastRegWrite & 0x1F)
+
+		// Read the status byte to be returned
 		data = status
 
+		// Clear address latch flag w
+		ppu.w = 0
+
+		// Clear VBlank flag *after* reading the status into `data`
+		ppu.IO.PPUSTATUS.VBLANK = false
+		// NMI line itself is not cleared here; it's cleared by the PPU timing (pre-render line)
+
 	case 0x04: // OAMDATA ($2004)
+		// Handle OAMDATA reads (ensure correct behavior during rendering if needed)
+		// Simple version: read directly from OAMADDR
 		data = ppu.IO.OAM[ppu.IO.OAMADDR]
+		// Note: Reading OAMDATA during rendering has specific behaviors,
+		// but this simple read is often sufficient.
 
 	case 0x07: // PPUDATA ($2007)
-		dataToReturn := ppu.IO.PPU_DATA_BUFFER
-		currentRead := ppu.ReadPPUMemory(ppu.v)
+		dataToReturn := ppu.IO.PPU_DATA_BUFFER // Return buffered value for reads < 0x3F00
+		currentRead := ppu.ReadPPUMemory(ppu.v) // Perform the actual read
 
-		if ppu.v >= 0x3F00 {
+		if ppu.v >= 0x3F00 { // Reads from Palette RAM are not buffered
 			dataToReturn = currentRead
-			mirroredAddr := 0x2000 | (ppu.v & 0x0FFF)
-			ppu.IO.PPU_DATA_BUFFER = ppu.ReadPPUMemory(mirroredAddr)
+			// Buffer is filled with the value from the *mirrored* VRAM address below the palette range ($3F00-$3FFF mirrors $2F00-$2FFF)
+			// --- FIX: Correctly update buffer during palette reads ---
+			ppu.IO.PPU_DATA_BUFFER = ppu.ReadPPUMemory(ppu.v & 0x2FFF) // Correctly read from VRAM mirrored below palette
 		} else {
+			// For reads below palette, update buffer with current read for the *next* read
 			ppu.IO.PPU_DATA_BUFFER = currentRead
 		}
 
-		ppu.incrementVramAddress()
+		ppu.incrementVramAddress() // Increment VRAM address after read
 		data = dataToReturn
 
 	default:
+		// Reading other registers (write-only or unused) typically returns LastRegWrite
+		// or has open bus behavior. Returning LastRegWrite is a common simplification.
 		data = ppu.IO.LastRegWrite
 	}
+
+	// Return the final data byte
 	return data
 }
 
@@ -193,11 +210,17 @@ func (ppu *PPU) WriteRegister(addr uint16, data byte) {
 	switch reg {
 	case 0x00: // PPUCTRL ($2000)
 		oldNMIEnable := ppu.IO.PPUCTRL.GEN_NMI
+		wasInVBlank := ppu.IO.PPUSTATUS.VBLANK // Check VBlank state *before* updating PPUCTRL
 		ppu.IO.PPUCTRL.Set(data)
+		// Update temporary VRAM address t with nametable bits
 		ppu.t = (ppu.t & 0xF3FF) | (uint16(data&0x03) << 10)
 
-		if ppu.IO.PPUSTATUS.VBLANK && ppu.IO.PPUCTRL.GEN_NMI && !oldNMIEnable {
-			ppu.IO.TriggerNMI()
+		// Check NMI logic based on VBlank state and NMI enable flag transition
+		newNMIEnable := ppu.IO.PPUCTRL.GEN_NMI
+		if wasInVBlank && newNMIEnable && !oldNMIEnable {
+			ppu.IO.NMI = true // Assert NMI line if VBlank is active and NMI got enabled
+		} else if !newNMIEnable { // If NMI is disabled by this write, ensure NMI line is low
+			ppu.IO.ClearNMI()
 		}
 
 	case 0x01: // PPUMASK ($2001)

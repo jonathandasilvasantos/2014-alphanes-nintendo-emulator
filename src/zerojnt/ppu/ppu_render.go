@@ -1,6 +1,5 @@
 package ppu
 
-
 // Process executes one PPU cycle, updating state and potentially rendering a pixel.
 func Process(ppu *PPU) {
 	currentScanline := ppu.SCANLINE
@@ -8,10 +7,11 @@ func Process(ppu *PPU) {
 
 	if currentScanline == -1 { // Pre-render Scanline
 		if currentCycle == 1 {
-			ppu.IO.PPUSTATUS.VBLANK = false
+			// Clear VBlank, Sprite 0 Hit, Sprite Overflow flags
+			ppu.IO.PPUSTATUS.VBLANK = false // End of VBlank
+			ppu.IO.NMI = false // Drop NMI line level
 			ppu.IO.PPUSTATUS.SPRITE_0_BIT = false
 			ppu.IO.PPUSTATUS.SPRITE_OVERFLOW = false
-			ppu.IO.NMI = false
 		}
 
 		ppu.handleBackgroundFetchingAndShifting()
@@ -32,10 +32,6 @@ func Process(ppu *PPU) {
 			if currentCycle == 257 {
 				ppu.fetchSprites()
 			}
-		}
-
-		if ppu.isRenderingEnabled() && currentCycle == 260 {
-			ppu.Cart.ClockIRQCounter()
 		}
 
 	} else if currentScanline >= 0 && currentScanline <= 239 { // Visible Scanlines
@@ -63,18 +59,15 @@ func Process(ppu *PPU) {
 			}
 		}
 
-		if ppu.isRenderingEnabled() && currentCycle == 260 {
-			ppu.Cart.ClockIRQCounter()
-		}
-
 	} else if currentScanline == 240 { // Post-render Scanline
 		// PPU is idle, frame data complete
 
 	} else if currentScanline >= 241 && currentScanline <= 260 { // Vertical Blanking Scanlines
 		if currentScanline == 241 && currentCycle == 1 {
-			ppu.IO.PPUSTATUS.VBLANK = true
+			ppu.IO.PPUSTATUS.VBLANK = true // Set VBlank flag
 			if ppu.IO.PPUCTRL.GEN_NMI {
-				ppu.IO.TriggerNMI()
+				// Set the NMI line high. CPU will detect the rising edge if NMI_Latched was false.
+				ppu.IO.NMI = true
 			}
 			ppu.ShowScreen()
 		}
@@ -279,6 +272,7 @@ func (ppu *PPU) renderPixel() {
 	// Write to Screen Buffer - optimized with no bounds check
 	fb[rowStart+pixelX] = finalColor
 }
+
 // incrementScrollX handles the horizontal VRAM address increment
 func (ppu *PPU) incrementScrollX() {
 	if (ppu.v & 0x001F) == 31 {
