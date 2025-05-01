@@ -1,24 +1,7 @@
-/* 
-Copyright 2014, 2015 Jonathan da Silva Santos
-
-This file is part of Alphanes.
-
-    Alphanes is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    Alphanes is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with Alphanes. If not, see <http://www.gnu.org/licenses/>.
-*/
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -31,140 +14,124 @@ import (
 	"zerojnt/input"
 	"zerojnt/ioports"
 	"zerojnt/ppu"
-	"github.com/veandco/go-sdl2/sdl" // Still needed for PPU struct definition
+	"github.com/veandco/go-sdl2/sdl"
 )
 
 const (
-	// NES CPU runs at 1.789773 MHz (NTSC)
 	cpuFrequency = 1789773
-
-	// Target frame rate is 60 FPS (NTSC)
 	framesPerSecond = 60
-
-	// CPU cycles per frame as a float to preserve the fractional part
 	cpuCyclesPerFrameF = float64(cpuFrequency) / float64(framesPerSecond)
-
-	// Duration of one frame in nanoseconds
 	frameTime = time.Second / framesPerSecond
-
-	// PPU runs at 3x the CPU clock rate
 	ppuCyclesPerCpuCycle = 3
-	
-	// Batch size for PPU processing - increased for better performance without threading
-	ppuBatchSize = 32
+	ppuBatchSize = 256
 )
 
 type Emulator struct {
-	Running        bool
-	Paused         bool
-	cycleCount     uint64 // Global cycle counter
-	frameTimer     *time.Ticker
-	leftover       float64 // Fractional cycle accumulator
+	Running       bool
+	Paused        bool
+	cycleCount    uint64
+	leftover      float64
+	lastFrameTime time.Time
+	renderCounter int
 }
 
 var (
-	Cart     *cartridge.Cartridge
-	Nescpu   cpu.CPU
-	Nesppu   *ppu.PPU
-	Nesio    ioports.IOPorts
-	NesInput *input.InputHandler
-	Debug    debug.Debug
-	PPUDebug debug.PPUDebug
-	Alphanes Emulator
+	Cart           *cartridge.Cartridge
+	Nescpu         cpu.CPU
+	Nesppu         *ppu.PPU
+	Nesio          ioports.IOPorts
+	frameSkipPercent *int
+	NesInput       *input.InputHandler
+	Debug          debug.Debug
+	PPUDebug       debug.PPUDebug
+	Alphanes       Emulator
 )
 
 func main() {
-	// Defer cleanup operations to ensure they run at program exit
 	defer cleanup()
 
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: alphanes <rom-file> [debug-file]")
+	frameSkipPercent = flag.Int("skip", 0, "Percentage of frames to skip rendering (0-99)")
+	flag.Parse()
+
+	if *frameSkipPercent < 0 || *frameSkipPercent > 99 {
+		log.Fatalf("Error: Frame skip percentage must be between 0 and 99.")
+	}
+
+	romFile := flag.Arg(0)
+	
+	if romFile == "" {
+		fmt.Println("Usage: alphanes [options] <rom-file> [debug-file]")
+		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	fmt.Println("Loading " + os.Args[1])
+	fmt.Printf("Loading %s (Frame Skip: %d%%)\n", romFile, *frameSkipPercent)
 	var err error
-	Cart, err = cartridge.LoadRom(os.Args[1])
+	Cart, err = cartridge.LoadRom(romFile)
 	if err != nil {
 		log.Fatalf("Failed to load ROM: %v", err)
 	}
 
-	// Setup debug if needed
 	setupDebugMode()
-
-	// Initialize components
 	initializeEmulator()
-
-	// Start emulation
 	emulate()
 }
 
 func setupDebugMode() {
-	// Handle debug mode
-	if len(os.Args) >= 3 && strings.Contains(string(os.Args[2]), ".debug") {
-		fmt.Printf("Debug mode is on\n")
-		Debug = debug.OpenDebugFile(os.Args[2])
+	debugFile := flag.Arg(1)
+	if debugFile != "" && strings.Contains(debugFile, ".debug") {
+		fmt.Printf("Debug mode is on using %s\n", debugFile)
+		Debug = debug.OpenDebugFile(debugFile)
 	} else {
 		Debug.Enable = false
-		fmt.Printf("Debug mode is off\n")
 	}
 
-	// Handle PPU debug mode
-	if len(os.Args) >= 3 && strings.Contains(os.Args[2], ".ppu") {
-		PPUDebug = debug.OpenPPUDumpFile(os.Args[2])
+	if debugFile != "" && strings.Contains(debugFile, ".ppu") {
+		PPUDebug = debug.OpenPPUDumpFile(debugFile)
 		PPUDebug.Enable = true
+	} else {
+		PPUDebug.Enable = false
 	}
 }
 
 func initializeEmulator() {
-	// Initialize CPU first
 	Nescpu = cpu.StartCPU()
-	
-	// Initialize IOPorts using the loaded Cartridge
+
 	Nesio = ioports.StartIOPorts(Cart)
 	Nescpu.IO = Nesio
 	Nescpu.D = Debug
 	Nescpu.D.Verbose = true
 
-	// Set Reset Vector after loading the ROM and initializing the CPU
 	cpu.SetResetVector(&Nescpu, Cart)
 
-	fmt.Printf("PC after SetResetVector: %04X\nPRG[0x3FFC]: %02X\nPRG[0x3FFD]: %02X\n", 
+	fmt.Printf("PC after SetResetVector: %04X\nPRG[0x3FFC]: %02X\nPRG[0x3FFD]: %02X\n",
 		Nescpu.PC, Cart.PRG[0x3FFC], Cart.PRG[0x3FFD])
 
-	// Initialize PPU
 	var errPPU error
 	Nesppu, errPPU = ppu.StartPPU(&Nescpu.IO, Cart)
 	if errPPU != nil {
 		log.Fatalf("Failed to initialize PPU: %v", errPPU)
 	}
 
-	// Link PPU to CPU
 	Nescpu.SetPPU(Nesppu)
 
 	NesInput = input.NewInputHandler(Nesppu.IO)
 
-	// Initialize emulator state with leftover set to 0
 	Alphanes = Emulator{
-		Running:    true,
-		Paused:     false,
-		cycleCount: 0,
-		leftover:   0,
+		Running:       true,
+		Paused:        false,
+		cycleCount:    0,
+		leftover:      0,
+		lastFrameTime: time.Now(),
+		renderCounter: 0,
 	}
 }
 
 func cleanup() {
-	// Stop frame timer if it exists
-	if Alphanes.frameTimer != nil {
-		Alphanes.frameTimer.Stop()
-	}
-
-	// Cleanup CPU APU
 	if Nescpu.APU != nil {
 		Nescpu.APU.Shutdown()
 	}
-	
-	// Cleanup PPU SDL resources
+
 	if Nesppu != nil {
 		Nesppu.Cleanup()
 	}
@@ -173,69 +140,54 @@ func cleanup() {
 func emulate() {
 	fmt.Printf("Entering emulate(), PC: %04X\n", Nescpu.PC)
 
-	// Special case for nestest.nes
-	if strings.HasSuffix(os.Args[1], "nestest.nes") {
+	if strings.HasSuffix(flag.Arg(0), "nestest.nes") {
 		if Nescpu.PC == 0xC004 {
 			Nescpu.PC = 0xC000
 			fmt.Printf("  emulate() - Manually set PC to: %04X for nestest.nes\n", Nescpu.PC)
 		}
 	}
 
-	// Use a ticker for precise frame timing
-	frameTicker := time.NewTicker(frameTime)
-	defer frameTicker.Stop()
-	
 	cyclesThisFrame := uint64(0)
 	frameCount := uint64(0)
-	
-	// Performance monitoring variables
+
 	lastPerformanceReport := time.Now()
 	framesProcessed := uint64(0)
-	
-	// Main emulation loop
+
 	for Alphanes.Running && Nescpu.Running {
+		now := time.Now()
+		elapsedSinceLastFrame := now.Sub(Alphanes.lastFrameTime)
 
 		if !Alphanes.Paused {
-			// Calculate the cycle budget for this frame with fractional accumulation
-			budget := cpuCyclesPerFrameF + Alphanes.leftover
-			cyclesBudget := int(budget)                      // Integer part for this frame
-			Alphanes.leftover = budget - float64(cyclesBudget) // Store fractional part for next frame
-			
-			// Process a batch of CPU cycles
-			batchSize := ppuBatchSize
-			if cyclesThisFrame + uint64(batchSize) > uint64(cyclesBudget) {
-				// Don't exceed cycles budget for this frame
-				batchSize = int(uint64(cyclesBudget) - cyclesThisFrame)
-			}
-			
-			if batchSize > 0 {
-				// Process CPU and PPU cycles in a single optimized batch
-				for i := 0; i < batchSize; i++ {
-					// Execute one CPU cycle
-					cpu.Process(&Nescpu, Cart)
-				
-					// Execute PPU cycles (3 per CPU cycle)
-					for j := 0; j < ppuCyclesPerCpuCycle; j++ {
-						ppu.Process(Nesppu)
+			if elapsedSinceLastFrame >= frameTime || cyclesThisFrame == 0 {
+				budget := cpuCyclesPerFrameF + Alphanes.leftover
+				cyclesBudget := int(budget)
+				Alphanes.leftover = budget - float64(cyclesBudget)
+
+				for cyclesThisFrame < uint64(cyclesBudget) {
+					batchSize := ppuBatchSize
+					if cyclesThisFrame+uint64(batchSize) > uint64(cyclesBudget) {
+						batchSize = int(uint64(cyclesBudget) - cyclesThisFrame)
 					}
-					
-					// Update APU - Optional: could be moved outside the inner loop
-					// for better performance if timing precision is less critical
-					if Nescpu.APU != nil {
-						Nescpu.APU.Clock()
+
+					for i := 0; i < batchSize; i++ {
+						cpu.Process(&Nescpu, Cart)
+
+						for j := 0; j < ppuCyclesPerCpuCycle; j++ {
+							ppu.Process(Nesppu)
+						}
+
+						if Nescpu.APU != nil {
+							Nescpu.APU.Clock()
+						}
+
+						Alphanes.cycleCount++
+						cyclesThisFrame++
+
+						if cyclesThisFrame >= uint64(cyclesBudget) {
+							break
+						}
 					}
-					
-					// Increment global cycle count
-					Alphanes.cycleCount++
 				}
-				
-				cyclesThisFrame += uint64(batchSize)
-			}
-			
-			// Check if we've completed a frame based on our dynamic budget
-			if cyclesThisFrame >= uint64(cyclesBudget) {
-				// Wait for the next frame tick for consistent timing
-				<-frameTicker.C
 
 				sdl.PumpEvents()
 				for processed := 0; processed < 6; processed++ {
@@ -243,52 +195,64 @@ func emulate() {
 					if currentEvent == nil {
 						break
 					}
-		
+
 					NesInput.HandleEvent(currentEvent)
-		
+
 					switch e := currentEvent.(type) {
 					case sdl.KeyboardEvent:
 						keyName := sdl.GetKeyName(e.Keysym.Sym)
 						isPressed := (e.State == sdl.PRESSED)
-		
+
 						if keyName == "Escape" && isPressed {
 							fmt.Printf("DEBUG: Escape key pressed, quitting application\n")
 							return
 						}
 					}
 				}
-				
+
 				cyclesThisFrame = 0
 				frameCount++
+
+				shouldRender := true
+				if *frameSkipPercent > 0 {
+					renderDecisionValue := 100 - *frameSkipPercent
+					if Alphanes.renderCounter >= renderDecisionValue {
+						shouldRender = false
+					}
+					Alphanes.renderCounter++
+					if Alphanes.renderCounter >= 100 {
+						Alphanes.renderCounter = 0
+					}
+				}
+				Nesppu.SetSkipRender(!shouldRender)
+
 				framesProcessed++
-				
-				// Performance reporting every 5 seconds
+				Alphanes.lastFrameTime = now
+
 				if time.Since(lastPerformanceReport) >= 5*time.Second {
 					timeElapsed := time.Since(lastPerformanceReport).Seconds()
 					fps := float64(framesProcessed) / timeElapsed
-					
-					// Calculate CPU cycles per second for performance metrics
-					// Use an average cycles/frame for this calculation
+
 					avgCyclesPerFrame := float64(cpuFrequency) / float64(framesPerSecond)
 					cyclesPerSecond := float64(framesProcessed) * avgCyclesPerFrame / timeElapsed
 					cpuPercentage := (cyclesPerSecond / float64(cpuFrequency)) * 100
-					
-					fmt.Printf("Performance: %.2f FPS (target: %d) - CPU utilization: %.1f%%\n", 
+
+					fmt.Printf("Performance: %.2f FPS (target: %d) - CPU utilization: %.1f%%\n",
 						fps, framesPerSecond, cpuPercentage)
-					
+
 					lastPerformanceReport = time.Now()
 					framesProcessed = 0
 				}
+			} else {
+				sleepDuration := frameTime - elapsedSinceLastFrame
+				if sleepDuration > time.Millisecond {
+					time.Sleep(sleepDuration / 2)
+				} else {
+					time.Sleep(time.Millisecond)
+				}
 			}
 		} else {
-			// Consume any frame ticks while paused
-			select {
-			case <-frameTicker.C:
-				// Tick consumed
-			default:
-				// No pending tick, sleep a bit
-				time.Sleep(16 * time.Millisecond)
-			}
+			time.Sleep(16 * time.Millisecond)
 		}
 	}
 }

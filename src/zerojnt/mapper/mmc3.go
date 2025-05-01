@@ -21,28 +21,28 @@ type MMC3State struct {
 	bankRegisters [8]byte
 
 	// Mirroring ($A000)
-	mirroringMode byte // 0=Vertical, 1=Horizontal (or Four Screen if cart allows)
+	mirroringMode byte // 0=Vertical, 1=Horizontal
 
 	// PRG RAM Protect ($A001)
 	prgRAMEnabled      bool // Bit 7: 0=Enabled, 1=Disabled
-	prgRAMWriteProtect bool // Bit 6: 0=Write Enabled, 1=Write Disabled (ignored if RAM disabled)
+	prgRAMWriteProtect bool // Bit 6: 0=Write Enabled, 1=Write Disabled
 
 	// IRQ Control
-	irqCounter byte   // Scanline counter
-	irqLatch   byte   // Value to reload counter with ($C000)
-	irqReload  bool   // Flag to reload counter on next eligible clock ($C001 write)
-	irqEnabled bool   // Master IRQ enable flag ($E001 write)
-	irqPending bool   // Flag indicating IRQ has been triggered ($C001 clears, $E001 enables/ack)
+	irqCounter byte
+	irqLatch   byte
+	irqReload  bool
+	irqEnabled bool
+	irqPending bool
 
 	// Derived/Cached State
-	prgOffsets [4]uint32 // Effective offsets in OriginalPRG for CPU banks $8000, $A000, $C000, $E000
-	chrOffsets [8]uint32 // Effective offsets in OriginalCHR for PPU banks $0000(x2), $0800(x2), $1000, $1400, $1800, $1C00
+	prgOffsets [4]uint32 // Effective offsets for CPU banks $8000, $A000, $C000, $E000
+	chrOffsets [8]uint32 // Effective offsets for PPU banks $0000-$1FFF
 
 	// Cartridge Info Cache
-	prgSize       uint32 // Size of OriginalPRG in bytes
-	chrSize       uint32 // Size of OriginalCHR in bytes (0 if RAM)
-	numPrgBanks8k uint32 // Total number of 8KB banks in OriginalPRG
-	numChrBanks1k uint32 // Total number of 1KB banks in OriginalCHR/RAM
+	prgSize       uint32
+	chrSize       uint32
+	numPrgBanks8k uint32
+	numChrBanks1k uint32
 	hasSRAM       bool
 	hasChrRAM     bool
 	hasFourScreen bool
@@ -51,23 +51,23 @@ type MMC3State struct {
 // MMC3 represents the MMC3 mapper (Mapper 4).
 type MMC3 struct {
 	state MMC3State
-	cart  MapperAccessor // Interface for accessing cartridge data
-	mutex sync.RWMutex   // Use RWMutex for separate read/write locking
+	cart  MapperAccessor
+	mutex sync.RWMutex
 	irqCounter   byte
 	irqReload    byte
 	irqEnabled   bool
 	irqAsserted  bool  
 }
 
-// Compile-time check to ensure MMC3 implements the Mapper interface
+// Ensure MMC3 implements the Mapper interface
 var _ Mapper = (*MMC3)(nil)
 
-// Initialize initializes the MMC3 mapper state based on the cartridge.
+// Initialize sets up the MMC3 mapper state based on the cartridge.
 func (m *MMC3) Initialize(cart MapperAccessor) {
 	m.cart = cart
 
 	m.state.prgSize = cart.GetPRGSize()
-	m.state.chrSize = cart.GetCHRSize() // 0 if CHR RAM
+	m.state.chrSize = cart.GetCHRSize()
 	m.state.hasSRAM = cart.HasSRAM()
 	m.state.hasChrRAM = (m.state.chrSize == 0)
 	m.state.hasFourScreen = cart.HasFourScreenVRAM()
@@ -85,7 +85,7 @@ func (m *MMC3) Initialize(cart MapperAccessor) {
 		if effectiveChrSize == 0 {
 			effectiveChrSize = CHR_BANK_SIZE // Default to 8KB if not specified
 		}
-		m.state.chrSize = effectiveChrSize // Use effective size for banking
+		m.state.chrSize = effectiveChrSize
 		m.state.numChrBanks1k = m.state.chrSize / CHR_BANK_SIZE_1K
 	} else if m.state.chrSize > 0 {
 		m.state.numChrBanks1k = m.state.chrSize / CHR_BANK_SIZE_1K
@@ -94,13 +94,13 @@ func (m *MMC3) Initialize(cart MapperAccessor) {
 	}
 
 	log.Printf("MMC3 Initializing: PRG:%dKB(%d banks) CHR:%dKB(%d banks, RAM:%v) SRAM:%v 4SCR:%v",
-		m.state.prgSize/1024, m.state.numPrgBanks8k*2, // Report in 16KB equivalent
-		cart.GetCHRSize()/1024,                         // Log original CHR size
+		m.state.prgSize/1024, m.state.numPrgBanks8k*2,
+		cart.GetCHRSize()/1024,
 		m.state.numChrBanks1k, m.state.hasChrRAM,
 		m.state.hasSRAM, m.state.hasFourScreen)
 }
 
-// Reset resets the MMC3 mapper to its power-on/reset state.
+// Reset resets the MMC3 mapper to its power-on state.
 func (m *MMC3) Reset() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -110,9 +110,9 @@ func (m *MMC3) Reset() {
 	for i := range m.state.bankRegisters {
 		m.state.bankRegisters[i] = 0
 	}
-	m.state.mirroringMode = MMC3_MIRROR_VERTICAL // Default
-	m.state.prgRAMEnabled = true                 // Typically enabled by default
-	m.state.prgRAMWriteProtect = false           // Typically writable by default
+	m.state.mirroringMode = MMC3_MIRROR_VERTICAL
+	m.state.prgRAMEnabled = true
+	m.state.prgRAMWriteProtect = false
 
 	// Reset IRQ state
 	m.state.irqCounter = 0
@@ -121,20 +121,19 @@ func (m *MMC3) Reset() {
 	m.state.irqEnabled = false
 	m.state.irqPending = false
 
-	// Update banks and mirroring based on reset state
+	// Update banks and mirroring
 	m.updateBanks()     
 	m.updateMirroring() 
 	m.copyBanks()       
 	log.Println("MMC3 Reset complete.")
 }
 
-// updateBanks calculates the effective bank offsets based on current registers. Called with lock held.
+// updateBanks calculates the effective bank offsets based on current registers
 func (m *MMC3) updateBanks() {
 	// PRG ROM Banking
-	prgMode0 := (m.state.bankSelect & 0x40) == 0 // R6/R7 control $8000/$A000
+	prgMode0 := (m.state.bankSelect & 0x40) == 0
 
 	// Get selected bank numbers from registers R6 and R7
-	// Mask bank numbers to be within the available range
 	prgBankMask8k := uint32(0)
 	if m.state.numPrgBanks8k > 0 {
 		prgBankMask8k = m.state.numPrgBanks8k - 1
@@ -143,44 +142,43 @@ func (m *MMC3) updateBanks() {
 	r7 := uint32(m.state.bankRegisters[7]) & prgBankMask8k
 
 	// Fixed banks are always the last two 8KB banks
-	fixedBankC000 := uint32(0) // Second-to-last bank
+	fixedBankC000 := uint32(0)
 	if m.state.numPrgBanks8k > 1 {
 		fixedBankC000 = (m.state.numPrgBanks8k - 2)
 	}
-	fixedBankE000 := uint32(0) // Last bank
+	fixedBankE000 := uint32(0)
 	if m.state.numPrgBanks8k > 0 {
 		fixedBankE000 = (m.state.numPrgBanks8k - 1)
 	}
 
 	if prgMode0 {
-		m.state.prgOffsets[0] = r6 * PRG_BANK_SIZE_8K            // $8000 swappable -> R6
-		m.state.prgOffsets[1] = r7 * PRG_BANK_SIZE_8K            // $A000 swappable -> R7
-		m.state.prgOffsets[2] = fixedBankC000 * PRG_BANK_SIZE_8K // $C000 fixed -> second-to-last
-		m.state.prgOffsets[3] = fixedBankE000 * PRG_BANK_SIZE_8K // $E000 fixed -> last
-	} else { // prgMode1 implied by else
-		m.state.prgOffsets[0] = fixedBankC000 * PRG_BANK_SIZE_8K // $8000 fixed -> second-to-last
-		m.state.prgOffsets[1] = r7 * PRG_BANK_SIZE_8K            // $A000 swappable -> R7
-		m.state.prgOffsets[2] = r6 * PRG_BANK_SIZE_8K            // $C000 swappable -> R6
-		m.state.prgOffsets[3] = fixedBankE000 * PRG_BANK_SIZE_8K // $E000 fixed -> last
+		m.state.prgOffsets[0] = r6 * PRG_BANK_SIZE_8K
+		m.state.prgOffsets[1] = r7 * PRG_BANK_SIZE_8K
+		m.state.prgOffsets[2] = fixedBankC000 * PRG_BANK_SIZE_8K
+		m.state.prgOffsets[3] = fixedBankE000 * PRG_BANK_SIZE_8K
+	} else {
+		m.state.prgOffsets[0] = fixedBankC000 * PRG_BANK_SIZE_8K
+		m.state.prgOffsets[1] = r7 * PRG_BANK_SIZE_8K
+		m.state.prgOffsets[2] = r6 * PRG_BANK_SIZE_8K
+		m.state.prgOffsets[3] = fixedBankE000 * PRG_BANK_SIZE_8K
 	}
 
 	// CHR ROM/RAM Banking
-	chrMode0 := (m.state.bankSelect & 0x80) == 0 // R0/R1 are 2KB, R2-R5 are 1KB
+	chrMode0 := (m.state.bankSelect & 0x80) == 0
 
 	// Get selected bank numbers from registers R0-R5
-	// Mask bank numbers to be within the available range
 	chrBankMask1k := uint32(0)
 	if m.state.numChrBanks1k > 0 {
 		chrBankMask1k = m.state.numChrBanks1k - 1
 	}
 
 	// R0 and R1 need special handling for 2KB banks
-	r0_2k := uint32(m.state.bankRegisters[0] & 0xFE) // Ignore bit 0 for 2KB banks
-	r1_2k := uint32(m.state.bankRegisters[1] & 0xFE) // Ignore bit 0 for 2KB banks
+	r0_2k := uint32(m.state.bankRegisters[0] & 0xFE)
+	r1_2k := uint32(m.state.bankRegisters[1] & 0xFE)
 
 	// Apply mask for 2KB banks
-	r0_2k &= chrBankMask1k & ^uint32(1) // Mask ensuring it's an even boundary and within range
-	r1_2k &= chrBankMask1k & ^uint32(1) // Mask ensuring it's an even boundary and within range
+	r0_2k &= chrBankMask1k & ^uint32(1)
+	r1_2k &= chrBankMask1k & ^uint32(1)
 
 	// 1KB banks use the full register value masked by 1k range
 	r2 := uint32(m.state.bankRegisters[2]) & chrBankMask1k
@@ -190,27 +188,27 @@ func (m *MMC3) updateBanks() {
 
 	// CHR mapping logic based on target PPU address ranges
 	if chrMode0 { 
-		m.state.chrOffsets[0] = r0_2k * CHR_BANK_SIZE_1K // $0000-$07FF
+		m.state.chrOffsets[0] = r0_2k * CHR_BANK_SIZE_1K
 		m.state.chrOffsets[1] = r0_2k*CHR_BANK_SIZE_1K + CHR_BANK_SIZE_1K
-		m.state.chrOffsets[2] = r1_2k * CHR_BANK_SIZE_1K // $0800-$0FFF
+		m.state.chrOffsets[2] = r1_2k * CHR_BANK_SIZE_1K
 		m.state.chrOffsets[3] = r1_2k*CHR_BANK_SIZE_1K + CHR_BANK_SIZE_1K
-		m.state.chrOffsets[4] = r2 * CHR_BANK_SIZE_1K    // $1000-$13FF
-		m.state.chrOffsets[5] = r3 * CHR_BANK_SIZE_1K    // $1400-$17FF
-		m.state.chrOffsets[6] = r4 * CHR_BANK_SIZE_1K    // $1800-$1BFF
-		m.state.chrOffsets[7] = r5 * CHR_BANK_SIZE_1K    // $1C00-$1FFF
+		m.state.chrOffsets[4] = r2 * CHR_BANK_SIZE_1K
+		m.state.chrOffsets[5] = r3 * CHR_BANK_SIZE_1K
+		m.state.chrOffsets[6] = r4 * CHR_BANK_SIZE_1K
+		m.state.chrOffsets[7] = r5 * CHR_BANK_SIZE_1K
 	} else { 
-		m.state.chrOffsets[0] = r2 * CHR_BANK_SIZE_1K    // $0000-$03FF
-		m.state.chrOffsets[1] = r3 * CHR_BANK_SIZE_1K    // $0400-$07FF
-		m.state.chrOffsets[2] = r4 * CHR_BANK_SIZE_1K    // $0800-$0BFF
-		m.state.chrOffsets[3] = r5 * CHR_BANK_SIZE_1K    // $0C00-$0FFF
-		m.state.chrOffsets[4] = r0_2k * CHR_BANK_SIZE_1K // $1000-$17FF
+		m.state.chrOffsets[0] = r2 * CHR_BANK_SIZE_1K
+		m.state.chrOffsets[1] = r3 * CHR_BANK_SIZE_1K
+		m.state.chrOffsets[2] = r4 * CHR_BANK_SIZE_1K
+		m.state.chrOffsets[3] = r5 * CHR_BANK_SIZE_1K
+		m.state.chrOffsets[4] = r0_2k * CHR_BANK_SIZE_1K
 		m.state.chrOffsets[5] = r0_2k*CHR_BANK_SIZE_1K + CHR_BANK_SIZE_1K
-		m.state.chrOffsets[6] = r1_2k * CHR_BANK_SIZE_1K // $1800-$1FFF
+		m.state.chrOffsets[6] = r1_2k * CHR_BANK_SIZE_1K
 		m.state.chrOffsets[7] = r1_2k*CHR_BANK_SIZE_1K + CHR_BANK_SIZE_1K
 	}
 }
 
-// copyBanks performs the actual copy to mapped windows. Called with lock held.
+// copyBanks performs the actual copy to mapped windows
 func (m *MMC3) copyBanks() {
 	// Copy PRG Banks (4 * 8KB chunks)
 	if m.cart.GetPRGSize() > 0 {
@@ -233,10 +231,10 @@ func (m *MMC3) copyBanks() {
 	}
 }
 
-// updateMirroring sets the mirroring mode in the cartridge. Called with lock held.
+// updateMirroring sets the mirroring mode in the cartridge
 func (m *MMC3) updateMirroring() {
 	if m.state.hasFourScreen {
-		m.cart.SetMirroringMode(false, false, true, 0) // Force four screen
+		m.cart.SetMirroringMode(false, false, true, 0) // Four screen
 	} else if m.state.mirroringMode == MMC3_MIRROR_HORIZONTAL {
 		m.cart.SetMirroringMode(false, true, false, 0) // Horizontal
 	} else {
@@ -244,14 +242,13 @@ func (m *MMC3) updateMirroring() {
 	}
 }
 
-// MapCPU maps a CPU address ($6000-$FFFF) to a PRG ROM/RAM offset.
+// MapCPU maps a CPU address ($6000-$FFFF) to a PRG ROM/RAM offset
 func (m *MMC3) MapCPU(addr uint16) (isROM bool, mappedAddr uint16) {
 	m.mutex.RLock() 
 	defer m.mutex.RUnlock()
 
 	if addr >= 0x6000 && addr <= 0x7FFF {
 		if m.state.hasSRAM && m.state.prgRAMEnabled {
-			// MMC3 typically has 8KB SRAM mapped directly here when enabled.
 			return false, addr & 0x1FFF // Offset within 8KB window
 		}
 		return false, 0xFFFF // Unmapped/disabled SRAM
@@ -267,21 +264,20 @@ func (m *MMC3) MapCPU(addr uint16) (isROM bool, mappedAddr uint16) {
 	return false, 0xFFFF // Unmapped
 }
 
-// MapPPU maps a PPU address ($0000-$1FFF) to a CHR ROM/RAM offset.
+// MapPPU maps a PPU address ($0000-$1FFF) to a CHR ROM/RAM offset
 func (m *MMC3) MapPPU(addr uint16) uint16 {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 
 	if addr < 0x2000 {
-		// Address relative to the 8KB window ($0000-$1FFF)
 		return addr & 0x1FFF
 	}
 
 	log.Printf("Warning: MMC3 MapPPU called with non-CHR address %04X", addr)
-	return 0xFFFF // Indicate invalid address for CHR mapping
+	return 0xFFFF // Invalid address for CHR mapping
 }
 
-// Write handles CPU writes to mapper registers ($8000-$FFFF) or potentially PRG RAM ($6000-$7FFF).
+// Write handles CPU writes to mapper registers or PRG RAM
 func (m *MMC3) Write(addr uint16, value byte) {
 	// Handle PRG RAM Writes ($6000-$7FFF)
 	if addr >= 0x6000 && addr <= 0x7FFF {
@@ -320,7 +316,7 @@ func (m *MMC3) Write(addr uint16, value byte) {
 			
 			// PRG banks R6/R7 have fewer bits
 			if regIndex == 6 || regIndex == 7 {
-				maskedValue &= 0x3F // Mask PRG banks to 6 bits (supports up to 512KB)
+				maskedValue &= 0x3F // Mask PRG banks to 6 bits
 			}
 
 			if m.state.bankRegisters[regIndex] != maskedValue {
@@ -370,8 +366,7 @@ func (m *MMC3) Write(addr uint16, value byte) {
 	}
 }
 
-// ClockIRQCounter simulates the MMC3 IRQ counter clocking mechanism.
-// Called by the PPU, typically when A12 rises during rendering.
+// ClockIRQCounter simulates the MMC3 IRQ counter clocking mechanism
 func (m *MMC3) ClockIRQCounter() {
 	m.mutex.Lock() 
 	defer m.mutex.Unlock()
@@ -383,13 +378,13 @@ func (m *MMC3) ClockIRQCounter() {
 		m.state.irqCounter-- 
 	}
 
-	// If counter is zero after decrement/reload, and IRQs are enabled, trigger pending flag
+	// Check if IRQ should trigger
 	if m.state.irqCounter == 0 && m.state.irqEnabled {
 		m.state.irqPending = true
 	}
 }
 
-// IRQState returns true if the mapper is currently asserting the IRQ line.
+// IRQState returns true if the mapper is asserting the IRQ line
 func (m *MMC3) IRQState() bool {
     m.mutex.RLock()
     state := m.irqAsserted
@@ -397,7 +392,7 @@ func (m *MMC3) IRQState() bool {
     return state
 }
 
-// ClearIRQ clears the asserted IRQ flag after the CPU vector fetch.
+// ClearIRQ clears the asserted IRQ flag after the CPU vector fetch
 func (m *MMC3) ClearIRQ() {
     m.mutex.Lock()
     m.irqAsserted = false

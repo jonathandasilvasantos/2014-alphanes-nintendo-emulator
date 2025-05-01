@@ -1,74 +1,75 @@
+// File: ./ppu/ppu_fetch.go
 package ppu
 
-// fetchNTByte fetches the Nametable byte based on the current VRAM address 'v'.
+// fetchNTByte fetches the Nametable byte based on the current VRAM address
 func (ppu *PPU) fetchNTByte() {
-	addr := 0x2000 | (ppu.v & 0x0FFF) // Nametable base + NT address bits from v
+	addr := 0x2000 | (ppu.v & 0x0FFF) 
 	ppu.nt_byte = ppu.ReadPPUMemory(addr)
-
-	// Update A12 state for potential IRQ clocking (if needed here)
-	// ppu.Cart.ClockIRQCounter((addr & 0x1000) != 0) // Example - Usually done after tile fetches
+	ppu.Cart.ClockIRQCounter() 
 }
 
-// fetchATByte fetches the Attribute Table byte based on 'v'.
+// fetchATByte fetches the Attribute Table byte
 func (ppu *PPU) fetchATByte() {
-	// Address: 0x23C0 | Nametable bits | CoarseY bits / 4 | CoarseX bits / 4
 	addr := 0x23C0 | (ppu.v & 0x0C00) | ((ppu.v >> 4) & 0x38) | ((ppu.v >> 2) & 0x07)
 	ppu.at_byte = ppu.ReadPPUMemory(addr)
-
-	// Update A12 state for potential IRQ clocking (if needed here)
-	// ppu.Cart.ClockIRQCounter((addr & 0x1000) != 0) // Example
-}
-
-// fetchTileDataLow fetches the low byte of the background tile pattern.
-func (ppu *PPU) fetchTileDataLow() {
-	fineY := (ppu.v >> 12) & 7
-	patternTable := ppu.IO.PPUCTRL.BACKGROUND_ADDR // $0000 or $1000
-	tileIndex := uint16(ppu.nt_byte)
-	addr := patternTable + tileIndex*16 + fineY
-	ppu.tile_data_lo = ppu.ReadPPUMemory(addr)
-
-	// Clock the mapper IRQ counter with the A12 state *during* this fetch
-	// currentA12State := (addr & 0x1000) != 0 // Argument removed to match function signature
 	ppu.Cart.ClockIRQCounter()
 }
 
-// fetchTileDataHigh fetches the high byte of the background tile pattern.
+// fetchTileDataLow fetches the low byte of the background tile pattern
+func (ppu *PPU) fetchTileDataLow() {
+	fineY := (ppu.v >> 12) & 7
+	patternTable := ppu.IO.PPUCTRL.BACKGROUND_ADDR
+	tileIndex := uint16(ppu.nt_byte)
+	addr := patternTable + tileIndex*16 + fineY
+	ppu.tile_data_lo = ppu.ReadPPUMemory(addr)
+	ppu.Cart.ClockIRQCounter()
+}
+
+// fetchTileDataHigh fetches the high byte of the background tile pattern
 func (ppu *PPU) fetchTileDataHigh() {
 	fineY := (ppu.v >> 12) & 7
 	patternTable := ppu.IO.PPUCTRL.BACKGROUND_ADDR
 	tileIndex := uint16(ppu.nt_byte)
-	addr := patternTable + tileIndex*16 + fineY + 8 // High plane is +8 bytes offset
+	addr := patternTable + tileIndex*16 + fineY + 8
 	ppu.tile_data_hi = ppu.ReadPPUMemory(addr)
-
-	// Clock the mapper IRQ counter with the A12 state *during* this fetch
-	// currentA12State := (addr & 0x1000) != 0 // Argument removed to match function signature
 	ppu.Cart.ClockIRQCounter()
 }
 
-// loadBackgroundShifters loads fetched tile data into background shift registers.
+// loadBackgroundShifters loads fetched tile data into background shift registers
 func (ppu *PPU) loadBackgroundShifters() {
-	// Load pattern data
-	ppu.bg_pattern_shift_lo = (ppu.bg_pattern_shift_lo & 0xFF00) | uint16(ppu.tile_data_lo)
-	ppu.bg_pattern_shift_hi = (ppu.bg_pattern_shift_hi & 0xFF00) | uint16(ppu.tile_data_hi)
+	lutKey := uint16(ppu.tile_data_hi)<<8 | uint16(ppu.tile_data_lo)
+	var decodedIndices [8]byte
+	copy(decodedIndices[:], planeDecode[lutKey][:])
 
-	// Determine attribute bits for the quadrant defined by v
-	shift := ((ppu.v >> 4) & 4) | (ppu.v & 2)     // Selects the correct 2 bits from AT byte
-	palette_bits := (ppu.at_byte >> shift) & 0x03 // Get 2 palette index bits
+	var patternLoBits, patternHiBits uint16
+	for i := 0; i < 8; i++ {
+		pixelIndexValue := decodedIndices[i]
+		lowBitOfIndex := uint16(pixelIndexValue & 1)
+		highBitOfIndex := uint16((pixelIndexValue >> 1) & 1)
+		shiftAmount := 7 - i
+		patternLoBits |= lowBitOfIndex << shiftAmount
+		patternHiBits |= highBitOfIndex << shiftAmount
+	}
 
-	// Expand bits to fill the lower byte of attribute shifters
+	ppu.bg_pattern_shift_lo = (ppu.bg_pattern_shift_lo & 0xFF00) | patternLoBits
+	ppu.bg_pattern_shift_hi = (ppu.bg_pattern_shift_hi & 0xFF00) | patternHiBits
+
+	coarseXBit1 := (ppu.v >> 1) & 1
+	coarseYBit1 := (ppu.v >> 6) & 1
+	attrShift := (coarseYBit1 << 2) | (coarseXBit1 << 1)
+	palette_bits := (ppu.at_byte >> attrShift) & 0x03
+
 	attr_fill_lo := uint16(0x0000)
 	if (palette_bits & 0x01) != 0 { attr_fill_lo = 0x00FF }
 	attr_fill_hi := uint16(0x0000)
 	if (palette_bits & 0x02) != 0 { attr_fill_hi = 0x00FF }
 
-	// Load attribute data
 	ppu.bg_attr_shift_lo = (ppu.bg_attr_shift_lo & 0xFF00) | attr_fill_lo
 	ppu.bg_attr_shift_hi = (ppu.bg_attr_shift_hi & 0xFF00) | attr_fill_hi
 }
 
-// evaluateSprites scans OAM to find sprites visible on the next scanline.
+// evaluateSprites scans OAM to find sprites visible on the next scanline
 func (ppu *PPU) evaluateSprites() {
-	// Clear secondary OAM
 	for i := range ppu.secondaryOAM { ppu.secondaryOAM[i] = 0xFF }
 	ppu.spriteCount = 0
 	ppu.IO.PPUSTATUS.SPRITE_OVERFLOW = false
@@ -78,32 +79,32 @@ func (ppu *PPU) evaluateSprites() {
 	if ppu.IO.PPUCTRL.SPRITE_SIZE_16 { spriteHeight = 16 }
 
 	scanlineToCheck := ppu.SCANLINE
-	if scanlineToCheck < 0 { scanlineToCheck = 0 }
+	if scanlineToCheck >= 239 || scanlineToCheck < -1 {
+	    ppu.spriteCount = 0
+	    return
+    }
+    scanlineForEval := scanlineToCheck + 1
 
 	numSpritesFound := 0
 	primaryOAM := ppu.IO.OAM
 
-	// Iterate through all 64 primary OAM entries
 	for n := 0; n < 64; n++ {
         oamIdx := n * 4
-		spriteY := int(primaryOAM[oamIdx]) + 1
+		spriteYTop := int(primaryOAM[oamIdx])
 
-		// Check if sprite is in range for next scanline
-		if scanlineToCheck >= spriteY && scanlineToCheck < (spriteY+spriteHeight) {
-			if numSpritesFound < 8 { // Copy to secondary OAM
+		if scanlineForEval >= spriteYTop+1 && scanlineForEval < (spriteYTop+1+spriteHeight) {
+			if numSpritesFound < 8 {
 				targetIdx := numSpritesFound * 4
-				ppu.secondaryOAM[targetIdx+0] = primaryOAM[oamIdx+0] // Y
-				ppu.secondaryOAM[targetIdx+1] = primaryOAM[oamIdx+1] // Tile Index
-				ppu.secondaryOAM[targetIdx+2] = primaryOAM[oamIdx+2] // Attributes
-				ppu.secondaryOAM[targetIdx+3] = primaryOAM[oamIdx+3] // X
+				ppu.secondaryOAM[targetIdx+0] = primaryOAM[oamIdx+0]
+				ppu.secondaryOAM[targetIdx+1] = primaryOAM[oamIdx+1]
+				ppu.secondaryOAM[targetIdx+2] = primaryOAM[oamIdx+2]
+				ppu.secondaryOAM[targetIdx+3] = primaryOAM[oamIdx+3]
 
-				// Check if this is sprite 0
 				if n == 0 {
 					ppu.spriteZeroHitPossible = true
 				}
 				numSpritesFound++
 			} else {
-				// Handle overflow
 				ppu.IO.PPUSTATUS.SPRITE_OVERFLOW = true
 				break
 			}
@@ -112,83 +113,80 @@ func (ppu *PPU) evaluateSprites() {
 	ppu.spriteCount = numSpritesFound
 }
 
-// fetchSprites loads pattern data for sprites in secondary OAM.
+// fetchSprites loads pattern data for sprites found in secondary OAM
 func (ppu *PPU) fetchSprites() {
-	// Clear sprite pipeline registers
 	for i := 0; i < 8; i++ {
-		ppu.spriteCountersX[i] = 0xFF // Mark inactive
+		ppu.spriteCountersX[i] = 0xFF
 		ppu.spriteLatches[i] = 0
 		ppu.spritePatternsLo[i] = 0
 		ppu.spritePatternsHi[i] = 0
 		ppu.spriteIsSprite0[i] = false
 	}
 
-	if !ppu.IO.PPUMASK.SHOW_SPRITE { return }
+	if !ppu.IO.PPUMASK.SHOW_SPRITE || ppu.spriteCount == 0 { return }
 
 	spriteHeight := 8
 	if ppu.IO.PPUCTRL.SPRITE_SIZE_16 { spriteHeight = 16 }
 
-	// Fetch data for sprites in secondary OAM
+	scanlineToRender := ppu.SCANLINE
+	if scanlineToRender < 0 || scanlineToRender > 239 {
+		return
+	}
+
 	for i := 0; i < ppu.spriteCount; i++ {
 		secOamIdx := i * 4
-		spriteY := uint16(ppu.secondaryOAM[secOamIdx+0]) + 1
+		spriteYTop := int(ppu.secondaryOAM[secOamIdx+0])
 		tileIndex := ppu.secondaryOAM[secOamIdx+1]
 		attributes := ppu.secondaryOAM[secOamIdx+2]
 		spriteX := ppu.secondaryOAM[secOamIdx+3]
 
-		// Load rendering state
 		ppu.spriteCountersX[i] = spriteX
 		ppu.spriteLatches[i] = attributes
 		ppu.spriteIsSprite0[i] = ppu.spriteZeroHitPossible && (i == 0)
 
-		// Determine pattern row based on flip and scanline
 		flipHoriz := (attributes & 0x40) != 0
 		flipVert := (attributes & 0x80) != 0
-		scanlineToRender := uint16(ppu.SCANLINE)
-		if scanlineToRender < 0 { scanlineToRender = 0 }
 
-		row := scanlineToRender - spriteY
+		rowInSprite := scanlineToRender - spriteYTop
 
 		if flipVert {
-			row = uint16(spriteHeight-1) - row
+			rowInSprite = (spriteHeight - 1) - rowInSprite
 		}
 
-		// Determine pattern table and tile address
 		var tileAddr uint16
 		var patternTable uint16
 
-		if spriteHeight == 8 { // 8x8 Sprites
+		if spriteHeight == 8 {
 			patternTable = ppu.IO.PPUCTRL.SPRITE_8_ADDR
-			row &= 7
-			tileAddr = patternTable + uint16(tileIndex)*16 + row
-		} else { // 8x16 Sprites
+			tileAddr = patternTable + uint16(tileIndex)*16 + uint16(rowInSprite&7)
+		} else {
 			patternTable = uint16(tileIndex & 0x01) * 0x1000
 			tileIndexBase := tileIndex & 0xFE
 
-			if row >= 8 { // Bottom half of sprite
-				tileIndexBase++ 
-				row -= 8
+			if rowInSprite >= 8 {
+				tileIndexBase++
+				rowInSprite -= 8
 			}
-			row &= 7
-			tileAddr = patternTable + uint16(tileIndexBase)*16 + row
+			tileAddr = patternTable + uint16(tileIndexBase)*16 + uint16(rowInSprite&7)
 		}
 
-		// Fetch pattern bytes
 		tileLo := ppu.ReadPPUMemory(tileAddr)
 		tileHi := ppu.ReadPPUMemory(tileAddr + 8)
-		
-		// Clock the mapper IRQ counter with A12 state during sprite fetch
-		// currentA12State := (tileAddr & 0x1000) != 0 // Argument removed to match function signature
-		ppu.Cart.ClockIRQCounter() // Clock for lo byte fetch
 
-		// Apply horizontal flip if needed
 		if flipHoriz {
 			tileLo = reverseByte(tileLo)
 			tileHi = reverseByte(tileHi)
 		}
 
-		// Load into shift registers
 		ppu.spritePatternsLo[i] = tileLo
 		ppu.spritePatternsHi[i] = tileHi
 	}
+}
+
+// reverseByte reverses the order of bits in a byte
+func reverseByte(b byte) byte {
+	b = (b&0xF0)>>4 | (b&0x0F)<<4
+	b = (b&0xCC)>>2 | (b&0x33)<<2
+	b = (b&0xAA)>>1 | (b&0x55)<<1
+	return b
 }
